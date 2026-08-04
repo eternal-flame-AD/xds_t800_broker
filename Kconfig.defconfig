@@ -1,0 +1,28 @@
+
+menu "Device Identity"
+
+config USB_MANUFACTURER_STRING
+    string "USB Manufacturer String"
+    default "Nordic Semiconductor ASA"
+
+config USB_PRODUCT_STRING
+    string "USB Product String"
+    default "XDS_T800_Broker"
+
+config BT_DEVICE_NAME
+    default "XDS_T800_Broker"
+
+config BT_DIS_MODEL_NUMBER_STR
+    default "T800 Broker"
+
+config BT_DIS_MANUF_NAME
+    default n
+
+config BT_DIS_HW_REV
+    default y
+
+config BT_DIS_HW_REV_STR
+    depends on BT_DIS_HW_REV
+    default "1.0"
+
+endmenu

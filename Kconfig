@@ -1,0 +1,98 @@
+rsource "Kconfig.defconfig"
+source "Kconfig.zephyr"
+
+config ZMS
+	default y if (SOC_FLASH_NRF_RRAM || SOC_FLASH_NRF_MRAM)
+
+config NVS
+	default y if !(SOC_FLASH_NRF_RRAM || SOC_FLASH_NRF_MRAM)
+
+menu "Battery management"
+	config AUTO_POWER_OFF_TIMEOUT
+		int "Auto power off timeout in seconds (0 = disabled)"
+		default 900
+		range 0 86400
+		depends on POWEROFF
+
+	# rough estimation based on eneloop datasheet
+	config BATTERY_CELL_COUNT
+		int "Battery cell count"
+		default 3
+		range 1 10
+	
+	config BATTERY_GAUGE_ADC_SCALE
+		int "ADC scale factor (1000 = 1V)"
+		default 1000
+		range 100 10000
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_10
+		int "Report 10% when cell voltage is at least this value"
+		default 1050
+	
+	config BATTERY_GAUGE_VOLTAGE_TABLE_20
+		int "Report 20% when cell voltage is at least this value"	
+		default 1160
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_30
+		int "Report 30% when cell voltage is at least this value"
+		default 1180
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_40
+		int "Report 40% when cell voltage is at least this value"
+		default 1200
+	
+	config BATTERY_GAUGE_VOLTAGE_TABLE_50
+		int "Report 50% when cell voltage is at least this value"
+		default 1220
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_60
+		int "Report 60% when cell voltage is at least this value"
+		default 1240
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_70
+		int "Report 70% when cell voltage is at least this value"
+		default 1260
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_80
+		int "Report 80% when cell voltage is at least this value"
+		default 1300
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_90
+		int "Report 90% when cell voltage is at least this value"
+		default 1350
+
+	config BATTERY_GAUGE_VOLTAGE_TABLE_100
+		int "Report 100% when cell voltage is at least this value"
+		default 1400
+
+endmenu
+
+
+menu "Channel configuration"
+
+config BPWR_TX_DIAG_FREQUENCY
+	int "ANT+ diagnostic frequency"
+	default 60
+	range 0 124
+
+endmenu
+
+menu "ANT+ Product information"
+
+	config BPWR_TX_HW_VERSION
+		int "Hardware revision"
+		default 5
+	
+	config BPWR_TX_MFG_ID
+		int "Manufacturer ID"
+		default 255
+	
+	config BPWR_TX_MODEL_NUM
+		int "Model number"
+		default 2
+	
+	config BPWR_TX_SW_VERSION
+		int "Software version"
+		default 0
+	
+endmenu

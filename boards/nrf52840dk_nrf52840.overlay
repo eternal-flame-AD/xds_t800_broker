@@ -1,0 +1,31 @@
+/ {
+	aliases {
+		/* this LED is super dim so no need to dim it */
+		power-led = &led0;
+		central1-status-led = &led1;
+		central2-status-led = &led2;
+		data-activity-led = &led3;
+	};
+};
+
+// we will be using NRFx
+&adc {
+	status = "disabled";
+};
+
+&spi0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};
+

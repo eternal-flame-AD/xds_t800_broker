@@ -1,0 +1,10 @@
+/.cache
+# editors
+*.swp
+*~
+
+# build
+/build*/
+
+*.local.conf
+local.conf

@@ -1,0 +1,31 @@
+
+/ {
+	aliases {
+		/* this LED is super dim so no need to dim it */
+		power-led = &led0_green;
+		central1-status-led = &red_pwm_led;
+		central2-status-led = &green_pwm_led;
+		data-activity-led = &blue_pwm_led;
+	};
+};
+
+// we will be using NRFx
+&adc {
+	status = "disabled";
+};
+
+&spi0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};
