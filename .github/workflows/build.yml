@@ -1,0 +1,78 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y west python3-pyelftools
+      - name: Download nrfutil
+        run: |
+          wget -O "${HOME}/nrfutil" \
+            "https://files.nordicsemi.com/ui/api/v1/download?repoKey=swtools&path=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil&isNativeBrowsing=false"
+          chmod +x "${HOME}/nrfutil"
+          ~/nrfutil install nrf5sdk-tools
+      - name: Set up Zephyr toolchain
+        run: |
+          cd ~
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64.tar.xz 
+          tar xf zephyr-sdk-0.17.0_linux-x86_64.tar.xz
+          cd zephyr-sdk-0.17.0
+          ./setup.sh -t arm-zephyr-eabi -c
+          echo "ZEPHYR_SDK_INSTALL_DIR=${HOME}/zephyr-sdk-0.17.0" >> "$GITHUB_ENV"
+      - name: Cache SDK
+        uses: actions/cache@v4
+        id: cache-sdk
+        with:
+          path: "${HOME}/sdk_ant"
+          key: ${{ runner.os }}-sdk
+      - name: Checkout SDK
+        if: ${{ steps.cache-sdk.outputs.cache-hit != 'true' }}
+        env:
+            SDK_ANT_CLONE_URL: ${{ secrets.SDK_ANT_CLONE_URL }}
+        run: |
+          west init -m "${SDK_ANT_CLONE_URL}" --mr main "${HOME}/sdk_ant"
+      - name: Update SDK
+        run: |
+          cd "${HOME}/sdk_ant"
+          west update
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Build
+        run: |
+          export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+          source "${HOME}/sdk_ant/zephyr/zephyr-env.sh"
+          mkdir -p build
+          mkdir -p ~/artifacts
+          for target in nrf52840dongle/nrf52840 nrf52840dk/nrf52840; do
+            west build --build-dir build \
+              --board $target --pristine --sysbuild -- \
+              -DCONF_FILE="prj.conf"
+            cp build/xds_t800_broker/zephyr/zephyr.hex "${HOME}/artifacts/xds_t800_broker_${target%/*}.hex"
+          done
+      - name: Create DFU packages
+        run: |
+          for file in ~/artifacts/*.hex; do
+            ${HOME}/nrfutil pkg generate \
+                --hw-version 52 \
+                --sd-req 0x00 \
+                --application "$file" \
+                --application-version 1 \
+                "${file%.hex}.zip"
+          done
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          path: ~/artifacts/*
+      - name: Upload release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ~/artifacts/*
+          tag: ${{ github.ref }}
+          overwrite: true
+          file_glob: true
