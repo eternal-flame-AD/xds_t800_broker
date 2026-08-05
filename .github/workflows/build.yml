@@ -11,12 +11,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y west python3-pyelftools
       - name: Download nrfutil
         run: |
+          set -e
           wget -O "${HOME}/nrfutil" \
             "https://files.nordicsemi.com/ui/api/v1/download?repoKey=swtools&path=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil&isNativeBrowsing=false"
           chmod +x "${HOME}/nrfutil"
           ~/nrfutil install nrf5sdk-tools
       - name: Set up Zephyr toolchain
         run: |
+          set -e
           cd ~
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64.tar.xz 
           tar xf zephyr-sdk-0.17.0_linux-x86_64.tar.xz
@@ -43,6 +45,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Build
         run: |
+          set -e
           export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
           source "${HOME}/sdk_ant/zephyr/zephyr-env.sh"
           mkdir -p build
@@ -55,6 +58,7 @@ jobs:
           done
       - name: Create DFU packages
         run: |
+          set -e
           for file in ~/artifacts/*.hex; do
             ${HOME}/nrfutil pkg generate \
                 --hw-version 52 \
