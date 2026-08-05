@@ -11,12 +11,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y west python3-pyelftools
       - name: Download nrfutil
         run: |
+          set -e
           wget -O "${HOME}/nrfutil" \
             "https://files.nordicsemi.com/ui/api/v1/download?repoKey=swtools&path=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil&isNativeBrowsing=false"
           chmod +x "${HOME}/nrfutil"
           ~/nrfutil install nrf5sdk-tools
       - name: Set up Zephyr toolchain
         run: |
+          set -e
           cd ~
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64.tar.xz 
           tar xf zephyr-sdk-0.17.0_linux-x86_64.tar.xz
@@ -43,19 +45,21 @@ jobs:
         uses: actions/checkout@v3
       - name: Build
         run: |
+          set -e
           export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
           source "${HOME}/sdk_ant/zephyr/zephyr-env.sh"
           mkdir -p build
-          mkdir -p ~/artifacts
+          mkdir -p artifacts
           for target in nrf52840dongle/nrf52840 nrf52840dk/nrf52840; do
             west build --build-dir build \
               --board $target --pristine --sysbuild -- \
               -DCONF_FILE="prj.conf"
-            cp build/xds_t800_broker/zephyr/zephyr.hex "${HOME}/artifacts/xds_t800_broker_${target%/*}.hex"
+            cp build/xds_t800_broker/zephyr/zephyr.hex "artifacts/xds_t800_broker_${target%/*}.hex"
           done
       - name: Create DFU packages
         run: |
-          for file in ~/artifacts/*.hex; do
+          set -e
+          for file in artifacts/*.hex; do
             ${HOME}/nrfutil pkg generate \
                 --hw-version 52 \
                 --sd-req 0x00 \
@@ -66,13 +70,13 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          path: ~/artifacts/*
+          path: artifacts/*
       - name: Upload release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ~/artifacts/*
+          file: artifacts/*
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
