@@ -1,55 +1,50 @@
-#include "ant_init.h"
-#include "battery_gauge.h"
-#include "central_t800.h"
-#include "hal/nrf_saadc.h"
-#include "watchdog.h"
-#include "zephyr/bluetooth/assigned_numbers.h"
-#include "zephyr/bluetooth/gap.h"
-#include "zephyr/sys/util.h"
-#include <assert.h>
-#include <bluetooth/gatt_dm.h>
-#include <hw_id.h>
-#include <shell/shell_bt_nus.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/errno.h>
+
+#include <bluetooth/gatt_dm.h>
+#include <hal/nrf_saadc.h>
+#include <hw_id.h>
+#include <shell/shell_bt_nus.h>
+
+#include <ant_key_manager.h>
+
+#include <nrfx_saadc.h>
+#include <zephyr/bluetooth/assigned_numbers.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/sys/poweroff.h>
-#include <zephyr/sys/reboot.h>
-
 #include <zephyr/bluetooth/services/bas.h>
-
-#include <dk_buttons_and_leds.h>
-
-#include <zephyr/settings/settings.h>
-
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/drivers/led.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/sys/poweroff.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/toolchain.h>
 
-#include <zephyr/drivers/led.h>
+#include <dk_buttons_and_leds.h>
 
+#include "ant_init.h"
 #include "ant_profiles.h"
+#include "battery_gauge.h"
 #include "cac_acm_serial.h"
 #include "central_profile.h"
+#include "central_t800.h"
 #include "gatt_battery.h"
 #include "gatt_callbacks.h"
 #include "gatt_cpu_load.h"
-#include "globals.h"
-#include "shell_ant_slave.h"
-#include "zephyr/net_buf.h"
-
-#include <ant_key_manager.h>
-#include <ant_parameters.h>
-
-#include <nrfx_saadc.h>
-
 #include "leds.h"
+#include "shell_ant_slave.h"
+#include "watchdog.h"
+
+#include "main.h"
 
 #define STACKSIZE 1024
 #define PRIORITY 7
@@ -67,6 +62,10 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
   BT_CONN_LE_CREATE_PARAM(BT_CONN_LE_OPT_NONE,                                 \
                           (2 * BT_GAP_SCAN_FAST_INTERVAL),                     \
                           BT_GAP_SCAN_FAST_WINDOW)
+
+static uint8_t connection_attempt_count = 0;
+
+static uint8_t hwid[MAX(3, HW_ID_LEN)];
 
 const nrfx_saadc_channel_t vddhdiv5_channel = {
     .channel_config =
@@ -197,15 +196,9 @@ central_profile_instance_get(struct bt_conn *conn) {
   return NULL;
 }
 
-static uint8_t connection_attempt_count = 0;
-
-static uint8_t hwid[MAX(3, HW_ID_LEN)];
-
 static struct bt_gatt_exchange_params mtu_exchange_params = {
     .func = mtu_exchange_func,
 };
-
-static int scan_start();
 
 int64_t last_button_press_time = 0;
 
