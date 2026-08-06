@@ -37,6 +37,8 @@ static int64_t last_data_ms = 0;
 
 const uint8_t calibration_cmd[] = {0x02, 0x16, 0xaa, 0x10};
 
+static uint16_t last_power = UINT16_MAX;
+
 static struct bt_conn *central_conn = NULL;
 
 void cps_stuck_sensor_timer_handler(struct k_timer *timer_id) {
@@ -272,6 +274,20 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
     } else {
       out[4] = 100;
     }
+
+    if (CONFIG_BPWR_CLIP_RISING_DELTA > 0 && totPower > last_power) {
+      uint16_t delta = totPower - last_power;
+      if (delta > CONFIG_BPWR_CLIP_RISING_DELTA) {
+        LOG_WRN("Clipping rising delta: %d -> %d", totPower,
+                last_power + CONFIG_BPWR_CLIP_RISING_DELTA);
+        totPower = last_power + CONFIG_BPWR_CLIP_RISING_DELTA;
+      }
+    }
+    last_power = totPower;
+
+    out[2] = totPower & 0xFF;
+    out[3] = (totPower >> 8) & 0xFF;
+
     ant_bike_power_update(&bike_power, totPower, (200 - out[4]) / 2,
                           cadence < 0 ? 0 : cadence, angle);
 
@@ -334,6 +350,7 @@ static int on_discovery(struct bt_gatt_dm *dm) {
     LOG_INF("Subscribing to CPM characteristic: %d, COM CCC descriptor: %d",
             attr_cpm->handle, attr_com_ccc->handle);
 
+    last_power = UINT16_MAX; // first sample is not clipped
     cpm_sub_params.ccc_handle = attr_com_ccc->handle;
     cpm_sub_params.value_handle =
         bt_gatt_dm_attr_chrc_val(attr_cpm)->value_handle;

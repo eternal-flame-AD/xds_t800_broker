@@ -7,6 +7,13 @@ config ZMS
 config NVS
 	default y if !(SOC_FLASH_NRF_RRAM || SOC_FLASH_NRF_MRAM)
 
+menu "Data conditioning"
+	config BPWR_CLIP_RISING_DELTA
+		int "Clip rising delta in power readings to this value (W/smpl)"
+		default 300
+		range 0 2000
+endmenu
+
 menu "Battery management"
 	config AUTO_POWER_OFF_TIMEOUT
 		int "Auto power off timeout in seconds (0 = disabled)"
