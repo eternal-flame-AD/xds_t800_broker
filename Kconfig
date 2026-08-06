@@ -27,10 +27,10 @@ menu "Battery management"
 		default 3
 		range 1 10
 	
-	config BATTERY_GAUGE_ADC_SCALE
-		int "ADC scale factor (1000 = 1V)"
-		default 1000
-		range 100 10000
+	config BATTERY_GAUGE_ADC_REFERENCE_VOLTAGE
+		int "ADC reference voltage (mV)"
+		default 600
+		range 1 64000
 
 	config BATTERY_GAUGE_VOLTAGE_TABLE_10
 		int "Report 10% when cell voltage is at least this value"

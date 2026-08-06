@@ -1,7 +1,7 @@
 # Not recommended for typical head-unit connections.
 CONFIG_BT_PRIVACY=y
-# scale ADC reading by 100.5%
-CONFIG_BATTERY_GAUGE_ADC_SCALE=1005
+# scale ADC reading by 605/600
+CONFIG_BATTERY_GAUGE_ADC_REFERENCE_VOLTAGE=605
 
 CONFIG_BT_DEVICE_NAME="ZX25T_EMU"
 

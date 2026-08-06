@@ -3,13 +3,11 @@
 #include <sys/errno.h>
 
 #include <bluetooth/gatt_dm.h>
-#include <hal/nrf_saadc.h>
 #include <hw_id.h>
 #include <shell/shell_bt_nus.h>
 
 #include <ant_key_manager.h>
 
-#include <nrfx_saadc.h>
 #include <zephyr/bluetooth/assigned_numbers.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -66,22 +64,6 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 static uint8_t connection_attempt_count = 0;
 
 static uint8_t hwid[MAX(3, HW_ID_LEN)];
-
-const nrfx_saadc_channel_t vddhdiv5_channel = {
-    .channel_config =
-        {
-            .resistor_p = NRF_SAADC_RESISTOR_DISABLED,
-            .resistor_n = NRF_SAADC_RESISTOR_DISABLED,
-            .gain = SAADC_CH_CONFIG_GAIN_Gain1_4,
-            .reference = NRF_SAADC_REFERENCE_INTERNAL,
-            .acq_time = NRF_SAADC_ACQTIME_40US,
-            .mode = NRF_SAADC_MODE_SINGLE_ENDED,
-            .burst = NRF_SAADC_BURST_DISABLED,
-        },
-    .pin_p = NRFX_ANALOG_INTERNAL_VDDHDIV5,
-    .pin_n = NRFX_ANALOG_INPUT_DISABLED,
-    .channel_index = 0,
-};
 
 struct central_profile_instance {
   const struct central_profile *profile;
@@ -896,7 +878,6 @@ int bt_setup(void) {
 int main_loop(void) {
   int err;
   bool low_batt = false;
-  nrf_saadc_value_t saadc_value[2] = {0};
 
   err = hw_id_get(hwid, sizeof(hwid));
   if (err) {
@@ -914,23 +895,9 @@ int main_loop(void) {
 
   LOG_INIT();
 
-  if (!nrfx_saadc_init_check()) {
-    err = nrfx_saadc_init(1);
-    if (err) {
-      LOG_ERR("Failed to initialize SAADC: %d", err);
-      return err;
-    }
-  }
-  err = nrfx_saadc_channel_config(&vddhdiv5_channel);
+  err = battery_gauge_setup(K_SECONDS(1));
   if (err) {
-    LOG_ERR("Failed to configure SAADC channel: %d", err);
-    return err;
-  }
-
-  err = nrfx_saadc_simple_mode_set(1, NRF_SAADC_RESOLUTION_14BIT,
-                                   NRF_SAADC_OVERSAMPLE_4X, NULL);
-  if (err) {
-    LOG_ERR("Failed to set SAADC mode: %d", err);
+    LOG_ERR("Failed to setup battery gauge: %d", err);
     return err;
   }
 
@@ -987,28 +954,7 @@ int main_loop(void) {
   int64_t no_activity_since_ms = k_uptime_get();
 
   for (int i = 0;; i++) {
-    nrf_saadc_value_t new_value = 0;
-    err = nrfx_saadc_buffer_set(&new_value, 1);
-    if (err) {
-      LOG_ERR("Failed to set SAADC buffer: %d", err);
-    } else {
-      err = nrfx_saadc_mode_trigger();
-    }
-    if (err == 0) {
-      saadc_value[i & 1] = new_value;
-    }
-
-    uint16_t battery_mv =
-        ((uint32_t)MAX(saadc_value[0],
-                       saadc_value[1]) // input value, take max of two samples
-                                       // for momentary sags
-             * 5                       // VDDH / 5
-             * (4 / 4)                 // gain 1/4, remove gcd
-             * (600 / 8)               // 600mV reference, remove gcd
-         + (1 << 13) / 4 / 8           // rounding, remove gcd
-         ) /
-        ((1 << 14) / 4 / 8) // 14 bit input, remove gcd
-        * CONFIG_BATTERY_GAUGE_ADC_SCALE / 1000;
+    uint16_t battery_mv = battery_gauge_get_mv();
     uint8_t battery_level = battery_gauge_get_level(battery_mv);
     watchdog_feed();
     low_batt |= battery_level < LOW_BATTERY_THRESHOLD;

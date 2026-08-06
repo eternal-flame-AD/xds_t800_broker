@@ -8,11 +8,6 @@
 	};
 };
 
-// we will be using NRFx
-&adc {
-	status = "disabled";
-};
-
 &spi0 {
 	status = "disabled";
 };

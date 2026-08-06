@@ -1,7 +1,7 @@
 #include "leds.h"
-#include "zephyr/devicetree.h"
 
 #include <stdatomic.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/led.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/toolchain.h>
