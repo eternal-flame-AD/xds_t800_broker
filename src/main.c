@@ -895,7 +895,7 @@ int main_loop(void) {
 
   LOG_INIT();
 
-  err = battery_gauge_setup(K_SECONDS(1));
+  err = battery_gauge_setup();
   if (err) {
     LOG_ERR("Failed to setup battery gauge: %d", err);
     return err;
@@ -954,6 +954,10 @@ int main_loop(void) {
   int64_t no_activity_since_ms = k_uptime_get();
 
   for (int i = 0;; i++) {
+    err = battery_gauge_upkeep();
+    if (err) {
+      LOG_ERR("Failed to upkeep battery gauge: %d", err);
+    }
     uint16_t battery_mv = battery_gauge_get_mv();
     uint8_t battery_level = battery_gauge_get_level(battery_mv);
     watchdog_feed();

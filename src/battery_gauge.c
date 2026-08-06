@@ -85,21 +85,20 @@ static int32_t gauge_read() {
   return tmp;
 }
 
-static void battery_gauge_upkeep_handler(struct k_timer *timer) {
-
+int32_t battery_gauge_upkeep(void) {
   int32_t res = gauge_read();
   if (res < 0) {
     LOG_ERR("Failed to read ADC: %d", res);
-    return;
+    return res;
   }
 
   battery_gauge_samples[(next_sample++) % ARRAY_SIZE(battery_gauge_samples)] =
       res;
+
+  return 0;
 }
 
-K_TIMER_DEFINE(battery_gauge_upkeep_timer, battery_gauge_upkeep_handler, NULL);
-
-int battery_gauge_setup(k_timeout_t interval) {
+int battery_gauge_setup(void) {
   if (!device_is_ready(adc_dev)) {
     return -EINVAL;
   }
@@ -117,8 +116,6 @@ int battery_gauge_setup(k_timeout_t interval) {
   }
   battery_gauge_samples[0] = first_sample;
   next_sample = 1;
-
-  k_timer_start(&battery_gauge_upkeep_timer, interval, interval);
 
   return 0;
 }
