@@ -31,7 +31,7 @@ static ssize_t bas_battery_level_self_read_cb(struct bt_conn *conn,
     data[0] = battery_level_self;
     return 1;
   }
-  return BT_ATT_ERR_INVALID_OFFSET;
+  return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 }
 
 static ssize_t bas_battery_level_read_cb(struct bt_conn *conn,
@@ -43,7 +43,7 @@ static ssize_t bas_battery_level_read_cb(struct bt_conn *conn,
     data[0] = battery_level;
     return 1;
   }
-  return BT_ATT_ERR_INVALID_OFFSET;
+  return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 }
 
 static ssize_t bas_battery_level_status_self_read_cb(

@@ -37,7 +37,7 @@
 #include "central_t800.h"
 #include "gatt_battery.h"
 #include "gatt_callbacks.h"
-#include "gatt_cpu_load.h"
+#include "gatt_system_info.h"
 #include "leds.h"
 #include "shell_ant_slave.h"
 #include "watchdog.h"
@@ -945,7 +945,7 @@ int main_loop(void) {
     return err;
   }
 
-  gatt_cpu_load_init();
+  gatt_sys_info_init();
 
   watchdog_init();
 

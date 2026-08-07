@@ -36,7 +36,7 @@ target_sources(app PRIVATE
   src/leds.c
   src/gatt_callbacks.c
   src/gatt_battery.c
-  src/gatt_cpu_load.c
+  src/gatt_system_info.c
   src/ant_profiles.c
   src/ant_bike_power.c
   src/shell_ant_slave.c

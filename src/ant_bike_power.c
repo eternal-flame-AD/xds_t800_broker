@@ -3,14 +3,9 @@
 #include "ant_profiles/common/pages/ant_common_page_80.h"
 #include "ant_profiles/common/pages/ant_common_page_81.h"
 #include "zephyr/bluetooth/gatt.h"
-#include <bluetooth/services/nsms.h>
 #include <string.h>
 #include <sys/errno.h>
 #include <zephyr/kernel.h>
-
-BT_NSMS_DEF(nsms_bike_power, "bike_power", BT_NSMS_SECURITY_LEVEL_NONE, "", 64);
-BT_NSMS_DEF(nsms_bike_power_internal, "bike_power_internal",
-            BT_NSMS_SECURITY_LEVEL_NONE, "", 64);
 
 static uint8_t page_ctr = 0;
 static uint8_t ant_bike_power_diag_network_key[] = {0xf8, 0x06, 0xc1, 0x4b,
@@ -104,12 +99,7 @@ void ant_bike_power_update_temp_and_weight(struct ant_bike_power_s *profile,
   profile->temperature = temperature;
   profile->force_kgf = force_kgf;
   profile->diag_time_diff = k_uptime_get() - profile->last_power_update_time;
-  char buf[64];
-  snprintf(buf, sizeof(buf), "temp=%d, force=%d.%dkgF, time_diff=%dms",
-           profile->temperature, profile->force_kgf / 10,
-           profile->force_kgf % 10, profile->diag_time_diff);
   k_mutex_unlock(&profile->update_mutex);
-  bt_nsms_set_status(&nsms_bike_power_internal, buf);
 }
 
 void ant_bike_power_update(struct ant_bike_power_s *profile, uint16_t power,
@@ -124,13 +114,7 @@ void ant_bike_power_update(struct ant_bike_power_s *profile, uint16_t power,
   profile->last_update_event_count = profile->update_event_count;
   profile->update_event_count++;
   profile->last_power_update_time = k_uptime_get();
-
-  char buf[64];
-  snprintf(buf, sizeof(buf), "power=%dW(%d%%R), %drpm, angle=%ddeg",
-           profile->instantaneous_power, profile->pwr_distribution_right,
-           profile->instantaneous_cadence, profile->angle);
   k_mutex_unlock(&profile->update_mutex);
-  bt_nsms_set_status(&nsms_bike_power, buf);
 }
 
 static void encode_page16_cache(struct ant_bike_power_s *profile) {

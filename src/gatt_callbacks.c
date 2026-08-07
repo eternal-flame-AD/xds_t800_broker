@@ -2,6 +2,7 @@
 #include "ant_profiles.h"
 #include "zephyr/bluetooth/conn.h"
 #include "zephyr/bluetooth/hci_types.h"
+#include "zephyr/sys/byteorder.h"
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(gatt_callbacks, CONFIG_BT_GATT_LOG_LEVEL);
@@ -36,19 +37,14 @@ void calibration_write_cb(struct bt_conn *conn, uint8_t err,
   }
 }
 
-ssize_t sensor_location_read_cb(struct bt_conn *conn,
-                                const struct bt_gatt_attr *attr, void *buf,
-                                uint16_t len, uint16_t offset) {
-  if (offset == 0 && len > 0) {
-    *((uint8_t *)buf) = 6;
-    return 1;
-  }
-  return BT_ATT_ERR_INVALID_OFFSET;
+ssize_t gatt_read_u8_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                        void *buf, uint16_t len, uint16_t offset) {
+  uint8_t val = *(uint8_t *)attr->user_data;
+  return bt_gatt_attr_read(conn, attr, buf, len, offset, &val, sizeof(val));
 }
 
-ssize_t cps_cpf_read_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                        void *buf, uint16_t len, uint16_t offset) {
-  const uint8_t data[] = {0b1, // Pedal Power Balance Supported
-                          0, 0, 0};
-  return bt_gatt_attr_read(conn, attr, buf, len, offset, data, sizeof(data));
+ssize_t gatt_read_u32_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                         void *buf, uint16_t len, uint16_t offset) {
+  uint32_t val = sys_cpu_to_le32(*(uint32_t *)attr->user_data);
+  return bt_gatt_attr_read(conn, attr, buf, len, offset, &val, sizeof(val));
 }

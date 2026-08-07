@@ -20,22 +20,40 @@
 
 LOG_MODULE_REGISTER(central_t800, LOG_LEVEL_INF);
 
+#define BT_UUID_DATA_PASSTHRU                                                  \
+  BT_UUID_DECLARE_128(                                                         \
+      BT_UUID_128_ENCODE(0xc78f0000, 0xb6c7, 0x4ceb, 0xbcfe, 0xcba497c197e6))
+
+BT_GATT_SERVICE_DEFINE(
+    data_passthru_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_DATA_PASSTHRU),
+    BT_GATT_CHARACTERISTIC(BT_UUID_GATT_CPS_CPM, BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_NONE, NULL, NULL, NULL),
+    BT_GATT_CCC(bt_ccc_write_cb, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_LOCATION, BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_NONE, NULL, NULL, NULL),
+    BT_GATT_CCC(bt_ccc_write_cb, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE));
+
+static const uint8_t sensor_location = 6;
+static const uint32_t cycling_power_feature =
+    BIT(0); //  Pedal Power Balance Supported
+
 BT_GATT_SERVICE_DEFINE(
     cps_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_CPS),
     BT_GATT_CHARACTERISTIC(BT_UUID_GATT_CPS_CPM, BT_GATT_CHRC_NOTIFY,
                            BT_GATT_PERM_NONE, NULL, NULL, NULL),
     BT_GATT_CCC(bt_ccc_write_cb, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(BT_UUID_GATT_CPS_CPF, BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ, cps_cpf_read_cb, NULL, NULL),
+                           BT_GATT_PERM_READ, gatt_read_u32_cb, NULL,
+                           (void *)&cycling_power_feature),
     BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_LOCATION, BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ, sensor_location_read_cb, NULL,
-                           NULL));
+                           BT_GATT_PERM_READ, gatt_read_u8_cb, NULL,
+                           (void *)&sensor_location));
 
 static _Atomic uint8_t calibration_result_pending = 0;
 
 static int64_t last_data_ms = 0;
 
-const uint8_t calibration_cmd[] = {0x02, 0x16, 0xaa, 0x10};
+static const uint8_t calibration_cmd[] = {0x02, 0x16, 0xaa, 0x10};
 
 static uint16_t last_power = UINT16_MAX;
 
@@ -145,6 +163,9 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
   if (err != 0) {
     LOG_ERR("Read internals after calib failed: %d", err);
     return BT_GATT_ITER_STOP;
+  } else {
+    bt_gatt_notify_uuid(NULL, BT_UUID_SENSOR_LOCATION,
+                        data_passthru_service.attrs, data, length);
   }
 
   int16_t internal_calibration_data = 0;
@@ -240,8 +261,10 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
   if (!data) {
     LOG_ERR("CPS CPM notify: ended");
     return BT_GATT_ITER_STOP;
+  } else {
+    bt_gatt_notify_uuid(NULL, BT_UUID_GATT_CPS_CPM, data_passthru_service.attrs,
+                        data, length);
   }
-  LOG_DBG("CPS CPM notify: (%d bytes)", length);
 
   uint8_t *incoming = (uint8_t *)data;
 
