@@ -13,7 +13,7 @@ typedef struct {
   uint8_t level;
 } battery_gauge_table_t;
 
-const battery_gauge_table_t battery_gauge_table[] = {
+static const battery_gauge_table_t battery_gauge_table[] = {
     {CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_10, 10},
     {CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_20, 20},
     {CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_30, 30},
@@ -28,9 +28,9 @@ const battery_gauge_table_t battery_gauge_table[] = {
 
 static const struct device *adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
 
-int16_t battery_gauge_samples[4] = {0};
+static int16_t battery_gauge_samples[4] = {0};
 static int16_t next_sample = 0;
-int64_t last_calibrated_at_ms = 0;
+static int64_t last_calibrated_at_ms = 0;
 
 static const struct adc_channel_cfg vddh_channel_cfg = {
     .gain = ADC_GAIN_1_4,
