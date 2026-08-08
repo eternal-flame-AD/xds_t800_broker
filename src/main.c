@@ -30,6 +30,7 @@
 #include <dk_buttons_and_leds.h>
 
 #include "ant_init.h"
+#include "ant_parameters.h"
 #include "ant_profiles.h"
 #include "battery_gauge.h"
 #include "cac_acm_serial.h"
@@ -39,6 +40,7 @@
 #include "gatt_callbacks.h"
 #include "gatt_system_info.h"
 #include "leds.h"
+#include "poweroff.h"
 #include "shell_ant_slave.h"
 #include "watchdog.h"
 
@@ -208,6 +210,7 @@ void btn_handler_fn(uint32_t button_state, uint32_t has_changed) {
   LOG_INF("Button state: %d, has_changed: %d", button_state, has_changed);
   if (has_changed) {
     if (button_state) {
+      poweroff_request_wakeup();
       last_button_press_time = k_uptime_get();
       k_work_reschedule(&start_pairing_mode_work, K_SECONDS(3));
     } else {
@@ -763,6 +766,17 @@ static void ant_evt_handler(ant_evt_t *p_ant_evt) {
              antplus_generic_slave_config.channel_number) {
     ant_generic_slave_evt_handler(p_ant_evt);
     return;
+  } else {
+    for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
+      if (p_ant_evt->channel == antplus_wakeup_slave_config[i].channel_number) {
+        if (p_ant_evt->event == EVENT_RX)
+          poweroff_request_wakeup();
+        if (p_ant_evt->event == EVENT_RX_SEARCH_TIMEOUT) {
+          ant_channel_close(antplus_wakeup_slave_config[i].channel_number);
+        }
+        return;
+      }
+    }
   }
   LOG_ERR("Unknown channel: %d", p_ant_evt->channel);
 }
@@ -984,9 +998,7 @@ int main_loop(void) {
         (k_uptime_get() - no_activity_since_ms) >
             CONFIG_AUTO_POWER_OFF_TIMEOUT * 1000) {
       LOG_INF("Auto power off triggered");
-      led_clear_bit(POWER_LED_BIT);
-      sys_poweroff();
-      sys_reboot(SYS_REBOOT_COLD);
+      enter_poweroff();
     }
 #endif
 

@@ -27,8 +27,33 @@ ant_channel_config_t bpwr_diag_channel_config = {
     .network_number = ANT_NETWORK_BPWR_DIAG,
 };
 
+ant_channel_config_t antplus_wakeup_slave_config[2] = {
+    {
+        .channel_number = 2,
+        .channel_type = 0,
+        .ext_assign = 0,
+        .rf_freq = 57,
+        .transmission_type = 0,
+        .device_type = 0, // to be filled
+        .device_number = 0,
+        .channel_period = 0, // to be filled
+        .network_number = ANT_NETWORK_ANTPLUS,
+    },
+    {
+        .channel_number = 3,
+        .channel_type = 0,
+        .ext_assign = 0,
+        .rf_freq = 57,
+        .transmission_type = 0,
+        .device_type = 0, // to be filled
+        .device_number = 0,
+        .channel_period = 0, // to be filled
+        .network_number = ANT_NETWORK_ANTPLUS,
+    },
+};
+
 ant_channel_config_t antplus_generic_slave_config = {
-    .channel_number = 2,
+    .channel_number = 4,
     .channel_type = 0,
     .ext_assign = 0,
     .rf_freq = 57,

@@ -2,13 +2,11 @@
 
 #include <zephyr/sys/poweroff.h>
 
-#include "leds.h"
+#include "poweroff.h"
 
 int shell_poweroff_cmd_handler(const struct shell *shell, size_t argc,
                                char **argv) {
-  led_clear_bit(POWER_LED_BIT);
-  sys_poweroff();
-  led_set_bit(POWER_LED_BIT);
+  enter_poweroff();
   return 0;
 }
 

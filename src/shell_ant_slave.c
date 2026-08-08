@@ -1,5 +1,8 @@
+#include <sys/errno.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/shell/shell.h>
 
+#include "ant_channel_config.h"
 #include "ant_parameters.h"
 #include "ant_profiles.h"
 #include <ant_interface.h>
@@ -7,41 +10,126 @@
 
 LOG_MODULE_REGISTER(shell_ant_slave, LOG_LEVEL_INF);
 
+#define SETTINGS_ANT_SUBTREE "ant"
+#define SETTINGS_ANT_WAKEUP_SEGMENT "wakeup"
+
 static int antplus_generic_slave_cmd_handler(const struct shell *sh,
                                              size_t argc, char **argv,
                                              void *data) {
   shell_print(sh, "ANT+ Generic Slave");
 
+  struct channel_name_t {
+    const ant_channel_config_t *config;
+    const char *name;
+  };
+  struct channel_name_t channel_names[] = {
+      {&antplus_generic_slave_config, "Generic Slave"},
+      {&antplus_wakeup_slave_config[0], "Wakeup Slave 0"},
+      {&antplus_wakeup_slave_config[1], "Wakeup Slave 1"},
+  };
+
+  for (size_t i = 0; i < ARRAY_SIZE(channel_names); i++) {
+    uint8_t status;
+    shell_print(sh, "Contigured Device Number: %d",
+                channel_names[i].config->device_number);
+    shell_print(sh, "Contigured Device Type: %d",
+                channel_names[i].config->device_type);
+    shell_print(sh, "Contigured Transmit Type: %d",
+                channel_names[i].config->transmission_type);
+    shell_print(sh, "Contigured Channel Period: %d",
+                channel_names[i].config->channel_period);
+    shell_print(sh, "Contigured Network Number: %d",
+                channel_names[i].config->network_number);
+    shell_print(sh, "Contigured Channel Number: %d",
+                channel_names[i].config->channel_number);
+    shell_print(sh, "Contigured Channel Type: %d",
+                channel_names[i].config->channel_type);
+    shell_print(sh, "Contigured Ext Assign: %d",
+                channel_names[i].config->ext_assign);
+    if (ant_channel_status_get(channel_names[i].config->channel_number,
+                               &status) != 0) {
+      shell_error(sh, "Failed to get channel status");
+      return -EINVAL;
+    }
+    status &= STATUS_CHANNEL_STATE_MASK;
+    switch (status) {
+    case STATUS_UNASSIGNED_CHANNEL:
+      shell_print(sh, "Channel is unassigned");
+      break;
+    case STATUS_ASSIGNED_CHANNEL:
+      shell_print(sh, "Channel is assigned");
+      break;
+    case STATUS_SEARCHING_CHANNEL:
+      shell_print(sh, "Channel is searching");
+      break;
+    case STATUS_TRACKING_CHANNEL:
+      shell_print(sh, "Channel is tracking");
+      uint16_t device_number;
+      uint8_t device_type;
+      uint8_t transmit_type;
+      ant_channel_id_get(channel_names[i].config->channel_number,
+                         &device_number, &device_type, &transmit_type);
+      shell_print(sh, "Device number: %d",
+                  device_number | ((transmit_type << 12) & 0xFF0000));
+      shell_print(sh, "Device type: %d", device_type);
+      shell_print(sh, "Transmit type: %d", transmit_type & 0x0F);
+      break;
+    }
+  }
+  return 0;
+}
+
+static int antplus_wakeup_slave_cmd_set_handler(const struct shell *sh,
+                                                size_t argc, char **argv,
+                                                void *data) {
   uint8_t status;
+  uint16_t device_number;
+  uint8_t device_type;
+  uint8_t transmit_type;
+  uint8_t slot = 0;
+  if (argc > 2) {
+    shell_error(sh, "Usage: %s <slot>", argv[0]);
+    return -ENOEXEC;
+  }
+  if (argc == 2) {
+    slot = strtoul(argv[1], NULL, 10);
+    if (errno != 0) {
+      shell_error(sh, "Invalid slot: %s", argv[1]);
+      return -EINVAL;
+    }
+  }
+  ant_channel_id_get(antplus_generic_slave_config.channel_number,
+                     &device_number, &device_type, &transmit_type);
   if (ant_channel_status_get(antplus_generic_slave_config.channel_number,
                              &status) != 0) {
     shell_error(sh, "Failed to get channel status");
     return -EINVAL;
   }
-  status &= STATUS_CHANNEL_STATE_MASK;
-  switch (status) {
-  case STATUS_UNASSIGNED_CHANNEL:
-    shell_print(sh, "Channel is unassigned");
-    break;
-  case STATUS_ASSIGNED_CHANNEL:
-    shell_print(sh, "Channel is assigned");
-    break;
-  case STATUS_SEARCHING_CHANNEL:
-    shell_print(sh, "Channel is searching");
-    break;
-  case STATUS_TRACKING_CHANNEL:
-    shell_print(sh, "Channel is tracking");
-    uint16_t device_number;
-    uint8_t device_type;
-    uint8_t transmit_type;
-    ant_channel_id_get(antplus_generic_slave_config.channel_number,
-                       &device_number, &device_type, &transmit_type);
-    shell_print(sh, "Device number: %d",
-                device_number | ((transmit_type << 12) & 0xFF0000));
-    shell_print(sh, "Device type: %d", device_type);
-    shell_print(sh, "Transmit type: %d", transmit_type & 0x0F);
-    break;
+  if ((status & STATUS_CHANNEL_STATE_MASK) != STATUS_TRACKING_CHANNEL) {
+    shell_error(sh, "Channel is not tracking, connect to sensor first");
+    return -EINVAL;
   }
+  if (!device_number || !device_type || !transmit_type) {
+    shell_error(sh, "Device metadata is not correct");
+    return -EINVAL;
+  }
+
+  antplus_wakeup_slave_config[slot].transmission_type = transmit_type;
+  antplus_wakeup_slave_config[slot].device_type = device_type;
+  antplus_wakeup_slave_config[slot].device_number = device_number;
+  antplus_wakeup_slave_config[slot].channel_period =
+      antplus_generic_slave_config.channel_period;
+  char settings_name[] =
+      SETTINGS_ANT_SUBTREE "/" SETTINGS_ANT_WAKEUP_SEGMENT "/0";
+  settings_name[strlen(settings_name) - 1] = '0' + slot;
+
+  if (settings_save_one(settings_name, &antplus_wakeup_slave_config[slot],
+                        sizeof(antplus_wakeup_slave_config[slot])) != 0) {
+    shell_error(sh, "Failed to save wakeup ANT+ Slave");
+    return -EINVAL;
+  }
+  shell_print(sh, "Wakeup ANT+ Slave config slot %d set to %d %d %d", slot,
+              device_number, device_type, transmit_type);
 
   return 0;
 }
@@ -159,12 +247,49 @@ void ant_generic_slave_evt_handler(ant_evt_t *p_ant_evt) {
   }
 }
 
+static int ant_settings_set(const char *name, size_t len,
+                            settings_read_cb read_cb, void *cb_arg) {
+  const char *next;
+  int rc;
+
+  if (settings_name_steq(name, SETTINGS_ANT_WAKEUP_SEGMENT, &next) && next) {
+    unsigned long slot = strtoul(next, NULL, 10);
+    if (errno != 0 || slot >= ANT_WAKEUP_CHANNEL_SLOT_COUNT) {
+      return -ENOENT;
+    }
+    ant_channel_config_t tmp;
+    if (len != sizeof(tmp)) {
+      return -EINVAL;
+    }
+
+    rc = read_cb(cb_arg, &tmp, sizeof(tmp));
+    if (rc >= 0) {
+      tmp.channel_number = antplus_wakeup_slave_config[slot].channel_number;
+      memcpy(&antplus_wakeup_slave_config[slot], &tmp, sizeof(tmp));
+      LOG_INF("Wakeup ANT+ Slave slot %lu config set to %d %d %d", slot,
+              antplus_wakeup_slave_config[slot].device_number,
+              antplus_wakeup_slave_config[slot].device_type,
+              antplus_wakeup_slave_config[slot].channel_period);
+      return 0;
+    }
+
+    return rc;
+  }
+
+  return -ENOENT;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(ant, SETTINGS_ANT_SUBTREE, NULL,
+                               ant_settings_set, NULL, NULL);
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
     ant_slave_cmds,
     SHELL_CMD(start, NULL, "Start ANT+ Slave",
               antplus_generic_slave_cmd_start_handler),
     SHELL_CMD(stop, NULL, "Stop ANT+ Slave",
               antplus_generic_slave_cmd_stop_handler),
+    SHELL_CMD(set_wakeup, NULL, "Set wakeup ANT+ Slave",
+              antplus_wakeup_slave_cmd_set_handler),
     SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(ant_slave, &ant_slave_cmds, "ANT+ Slave",

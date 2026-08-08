@@ -46,6 +46,7 @@ target_sources(app PRIVATE
   src/shell_bootloader.c
   src/battery_gauge.c
   src/watchdog.c
+  src/poweroff.c
   src/cdc_acm_serial.c
   src/main.c
 )
