@@ -6,6 +6,15 @@
 		central2-status-led = &green_pwm_led;
 		data-activity-led = &blue_pwm_led;
 	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		selfreset: selfreset-pin {
+			gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
+			label = "Self Reset";
+		};
+	};
 };
 
 &spi0 {
