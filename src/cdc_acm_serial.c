@@ -7,6 +7,7 @@
 // this file is a modified version of the cdc_acm_serial.c file from the SDK
 // to avoid initializing USBD when powered by low voltage batteries.
 
+#include "bootloader.h"
 #include <stdint.h>
 
 #include <zephyr/device.h>
@@ -95,7 +96,7 @@ static void usb_msg_cb(struct usbd_context *const ctx,
   }
 }
 
-static int cdc_acm_serial_init_device(void) {
+static int cdc_acm_serial_init_device_impl(void) {
   int err;
 
   err = usbd_add_descriptor(&cdc_acm_serial, &cdc_acm_serial_lang);
@@ -154,6 +155,17 @@ static int cdc_acm_serial_init_device(void) {
     usb_enabled = true;
   }
 
+  return 0;
+}
+
+int cdc_acm_serial_init_device(void) {
+  int err;
+  err = cdc_acm_serial_init_device_impl();
+  if (err) {
+    LOG_ERR("Failed to initialize %s (%d)", "device support", err);
+    bootloader_enter();
+    return err;
+  }
   return 0;
 }
 

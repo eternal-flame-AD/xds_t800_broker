@@ -1,6 +1,7 @@
 #include "poweroff.h"
 #include "ant_profiles.h"
 #include "leds.h"
+#include "watchdog.h"
 #include <ant_interface.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/logging/log.h>
@@ -57,6 +58,7 @@ void enter_poweroff(void) {
       poweroff_wakeup_requested = true;
       led_clear_bit(POWER_LED_BIT);
       while (1) {
+        watchdog_feed();
         for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
           uint8_t status = 0;
           ant_channel_status_get(antplus_wakeup_slave_config[i].channel_number,

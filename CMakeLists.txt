@@ -43,7 +43,7 @@ target_sources(app PRIVATE
   src/shell_flush.c
   src/shell_bt.c
   src/shell_poweroff.c
-  src/shell_bootloader.c
+  src/bootloader.c
   src/battery_gauge.c
   src/watchdog.c
   src/poweroff.c

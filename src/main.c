@@ -3,6 +3,7 @@
 #include <sys/errno.h>
 
 #include <bluetooth/gatt_dm.h>
+#include <helpers/nrfx_reset_reason.h>
 #include <hw_id.h>
 #include <shell/shell_bt_nus.h>
 
@@ -33,6 +34,7 @@
 #include "ant_parameters.h"
 #include "ant_profiles.h"
 #include "battery_gauge.h"
+#include "bootloader.h"
 #include "cac_acm_serial.h"
 #include "central_profile.h"
 #include "central_t800.h"
@@ -771,9 +773,9 @@ static void ant_evt_handler(ant_evt_t *p_ant_evt) {
       if (p_ant_evt->channel == antplus_wakeup_slave_config[i].channel_number) {
         if (p_ant_evt->event == EVENT_RX)
           poweroff_request_wakeup();
-        if (p_ant_evt->event == EVENT_RX_SEARCH_TIMEOUT) {
+        if (p_ant_evt->event == EVENT_RX_SEARCH_TIMEOUT)
           ant_channel_close(antplus_wakeup_slave_config[i].channel_number);
-        }
+
         return;
       }
     }
@@ -892,6 +894,10 @@ int bt_setup(void) {
 int main_loop(void) {
   int err;
   bool low_batt = false;
+  uint32_t reset_reason = nrfx_reset_reason_get();
+  if (reset_reason & NRFX_RESET_REASON_DOG_MASK) {
+    bootloader_enter();
+  }
 
   err = hw_id_get(hwid, sizeof(hwid));
   if (err) {
@@ -961,8 +967,6 @@ int main_loop(void) {
 
   gatt_sys_info_init();
 
-  watchdog_init();
-
   led_set_bit(POWER_LED_BIT);
 
   int64_t no_activity_since_ms = k_uptime_get();
@@ -1014,7 +1018,7 @@ int main(void) {
   err = main_loop();
   if (err) {
     printk("Main loop failed (err %d)", err);
-    sys_reboot(SYS_REBOOT_COLD);
+    bootloader_enter();
     return err;
   }
   return 0;
