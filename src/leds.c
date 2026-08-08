@@ -1,14 +1,23 @@
 #include "leds.h"
+#include "zephyr/logging/log_core.h"
+#include "zephyr/settings/settings.h"
 
+#include <assert.h>
 #include <stdatomic.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/led.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/toolchain.h>
 
+LOG_MODULE_REGISTER(leds, LOG_LEVEL_INF);
+
 #define DATA_ACTIVITY_LED_OFF_INTERVAL_MS 200
 
-const uint8_t brightness_options[3] = {75, 50, 4};
+#define SETTINGS_LED_SUBTREE "led"
+#define SETTINGS_LED_BRIGHTNESS_SEGMENT "brightness"
+
+const uint8_t brightness_options[] = {100, 75, 50, 4};
+
 static uint8_t brightness_index = 0;
 
 static _Atomic uint8_t led_state = 0;
@@ -110,8 +119,33 @@ void led_clear_bit(uint8_t bit) {
 }
 
 void led_brightness_next(void) {
-  brightness_index = (brightness_index + 1) % 3;
+  brightness_index = (brightness_index + 1) % ARRAY_SIZE(brightness_options);
   refresh_leds();
+}
+
+static int brightness_cmd_handler(const struct shell *shell, size_t argc,
+                                  char **argv) {
+  uint8_t index = brightness_index;
+  shell_print(shell, "Brightness: %d (#%d)", brightness_options[index], index);
+  return 0;
+}
+
+static int brightness_save_cmd_handler(const struct shell *shell, size_t argc,
+                                       char **argv) {
+  uint8_t brightness = brightness_options[brightness_index];
+  settings_save_one(SETTINGS_LED_SUBTREE "/" SETTINGS_LED_BRIGHTNESS_SEGMENT,
+                    &brightness, sizeof(brightness));
+  shell_print(shell, "Brightness saved: %d", brightness);
+  return 0;
+}
+
+static int brightness_next_cmd_handler(const struct shell *shell, size_t argc,
+                                       char **argv) {
+  brightness_index = (brightness_index + 1) % ARRAY_SIZE(brightness_options);
+  refresh_leds();
+  shell_print(shell, "Brightness: %d (#%d)",
+              brightness_options[brightness_index], brightness_index);
+  return 0;
 }
 
 static int leds_cmd_handler(const struct shell *shell, size_t argc,
@@ -141,4 +175,65 @@ static int leds_cmd_handler(const struct shell *shell, size_t argc,
   return 0;
 }
 
-SHELL_CMD_REGISTER(leds, NULL, "LEDs commands", leds_cmd_handler);
+static int brightness_settings_set(const char *name, size_t len,
+                                   settings_read_cb read_cb, void *cb_arg) {
+  const char *next;
+  int rc;
+
+  if (settings_name_steq(name, SETTINGS_LED_BRIGHTNESS_SEGMENT, &next) &&
+      !next) {
+    uint8_t default_brightness;
+    if (len != sizeof(default_brightness)) {
+      return -EINVAL;
+    }
+
+    rc = read_cb(cb_arg, &default_brightness, sizeof(default_brightness));
+    if (rc >= 0) {
+      // find the index of the default brightness as the smallest index that is
+      // greater than or equal to the default brightness
+      uint8_t target_brightness_index = 0;
+      uint8_t achieved_brightness = brightness_options[0];
+      // first find the maximum brightness
+      for (size_t i = 0; i < ARRAY_SIZE(brightness_options); i++) {
+        if (brightness_options[i] >= achieved_brightness) {
+          achieved_brightness = brightness_options[i];
+          target_brightness_index = i;
+        }
+      }
+      // then find the dimmest option
+      for (size_t i = 0; i < ARRAY_SIZE(brightness_options); i++) {
+        uint8_t candidate_brightness = brightness_options[i];
+        if (candidate_brightness >= default_brightness &&
+            candidate_brightness < achieved_brightness) {
+          achieved_brightness = candidate_brightness;
+          target_brightness_index = i;
+        }
+      }
+      brightness_index = target_brightness_index;
+      refresh_leds();
+      LOG_INF("Default brightness: %d, target brightness index: %d",
+              default_brightness, target_brightness_index);
+      return 0;
+    }
+
+    return rc;
+  }
+
+  return -ENOENT;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(led, SETTINGS_LED_SUBTREE, NULL,
+                               brightness_settings_set, NULL, NULL);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(led_brightness_sub,
+                               SHELL_CMD(save, NULL, "Save default brightness",
+                                         brightness_save_cmd_handler),
+                               SHELL_CMD(next, NULL, "Next brightness",
+                                         brightness_next_cmd_handler));
+
+SHELL_STATIC_SUBCMD_SET_CREATE(led_sub,
+                               SHELL_CMD(brightness, &led_brightness_sub,
+                                         "Brightness command",
+                                         brightness_cmd_handler));
+
+SHELL_CMD_REGISTER(led, &led_sub, "LED commands", leds_cmd_handler);

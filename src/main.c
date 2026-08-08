@@ -529,8 +529,8 @@ static void discovery_not_found_cb(struct bt_conn *conn, void *context) {
       const bt_addr_le_t *dst = bt_conn_get_dst(conn);
       bt_addr_le_copy(&instance->known_peer, dst);
       char name_buf[64];
-      if (snprintf(name_buf, sizeof(name_buf),
-                   BT_CENTRAL_KNOWN_PEER_SETTINGS_SUBTREE "%c%s",
+      if (snprintf(name_buf, sizeof(name_buf), "%s%c%s",
+                   BT_CENTRAL_KNOWN_PEER_SETTINGS_SUBTREE,
                    SETTINGS_NAME_SEPARATOR, instance->profile->name) > 0) {
         int err = settings_save_one(name_buf, dst, sizeof(*dst));
         if (err) {
