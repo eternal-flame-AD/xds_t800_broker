@@ -7,13 +7,6 @@ config ZMS
 config NVS
 	default y if !(SOC_FLASH_NRF_RRAM || SOC_FLASH_NRF_MRAM)
 
-menu "Wake on ANT+"
-	config ANT_WAKEUP
-		bool "Enable wake on ANT+"
-		default n
-endmenu
-
-
 menu "Data conditioning"
 	config BPWR_CLIP_RISING_DELTA
 		int "Clip rising delta in power readings to this value (W/smpl)"
