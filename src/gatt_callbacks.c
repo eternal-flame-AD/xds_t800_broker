@@ -1,4 +1,5 @@
 #include "gatt_callbacks.h"
+#include "ant_bike_power.h"
 #include "ant_profiles.h"
 #include "zephyr/bluetooth/conn.h"
 #include "zephyr/bluetooth/hci_types.h"

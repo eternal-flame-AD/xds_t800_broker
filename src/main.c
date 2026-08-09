@@ -4,7 +4,6 @@
 
 #include <bluetooth/gatt_dm.h>
 #include <helpers/nrfx_reset_reason.h>
-#include <hw_id.h>
 #include <shell/shell_bt_nus.h>
 
 #include <ant_key_manager.h>
@@ -45,6 +44,7 @@
 #include "poweroff.h"
 #include "shell_ant_slave.h"
 #include "watchdog.h"
+#include "zephyr/sys/byteorder.h"
 
 #include "main.h"
 
@@ -66,8 +66,6 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
                           BT_GAP_SCAN_FAST_WINDOW)
 
 static uint8_t connection_attempt_count = 0;
-
-static uint8_t hwid[MAX(3, HW_ID_LEN)];
 
 struct central_profile_instance {
   const struct central_profile *profile;
@@ -898,20 +896,6 @@ int main_loop(void) {
   if (reset_reason & NRFX_RESET_REASON_DOG_MASK) {
     bootloader_enter();
   }
-
-  err = hw_id_get(hwid, sizeof(hwid));
-  if (err) {
-    return 0;
-  }
-  uint32_t hwid_int = 0;
-  memcpy(&hwid_int, hwid, MIN(sizeof(hwid), sizeof(hwid_int)));
-  // write extended device id
-  bpwr_channel_config.transmission_type ^= (hwid_int << 4);
-  bpwr_channel_config.device_number =
-      1 + (hwid_int >> 4) % 65535; // device number cannot be 0
-  bpwr_diag_channel_config.transmission_type ^= (hwid_int << 4);
-  bpwr_diag_channel_config.device_number =
-      1 + (hwid_int >> 4) % 65535; // device number cannot be 0
 
   LOG_INIT();
 

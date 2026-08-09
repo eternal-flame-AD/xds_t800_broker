@@ -2,16 +2,13 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/shell/shell.h>
 
-#include "ant_channel_config.h"
-#include "ant_parameters.h"
 #include "ant_profiles.h"
+#include <ant_init.h>
 #include <ant_interface.h>
+#include <ant_parameters.h>
 #include <stdlib.h>
 
 LOG_MODULE_REGISTER(shell_ant_slave, LOG_LEVEL_INF);
-
-#define SETTINGS_ANT_SUBTREE "ant"
-#define SETTINGS_ANT_WAKEUP_SEGMENT "wakeup"
 
 static int antplus_generic_slave_cmd_handler(const struct shell *sh,
                                              size_t argc, char **argv,
@@ -281,41 +278,6 @@ void ant_generic_slave_evt_handler(ant_evt_t *p_ant_evt) {
     break;
   }
 }
-
-static int ant_settings_set(const char *name, size_t len,
-                            settings_read_cb read_cb, void *cb_arg) {
-  const char *next;
-  int rc;
-
-  if (settings_name_steq(name, SETTINGS_ANT_WAKEUP_SEGMENT, &next) && next) {
-    unsigned long slot = strtoul(next, NULL, 10);
-    if (errno != 0 || slot >= ANT_WAKEUP_CHANNEL_SLOT_COUNT) {
-      return -ENOENT;
-    }
-    ant_channel_config_t tmp;
-    if (len != sizeof(tmp)) {
-      return -EINVAL;
-    }
-
-    rc = read_cb(cb_arg, &tmp, sizeof(tmp));
-    if (rc >= 0) {
-      tmp.channel_number = antplus_wakeup_slave_config[slot].channel_number;
-      memcpy(&antplus_wakeup_slave_config[slot], &tmp, sizeof(tmp));
-      LOG_INF("Wakeup ANT+ Slave slot %lu config set to %d %d %d", slot,
-              antplus_wakeup_slave_config[slot].device_number,
-              antplus_wakeup_slave_config[slot].device_type,
-              antplus_wakeup_slave_config[slot].channel_period);
-      return 0;
-    }
-
-    return rc;
-  }
-
-  return -ENOENT;
-}
-
-SETTINGS_STATIC_HANDLER_DEFINE(ant, SETTINGS_ANT_SUBTREE, NULL,
-                               ant_settings_set, NULL, NULL);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
     ant_slave_cmds,

@@ -102,4 +102,8 @@ menu "ANT+ Product information"
 		int "Software version"
 		default 0
 	
+	config BPWR_TX_FALLBACK_DEVICE_NUMBER
+		int "Fallback device number with hardware ID not available"
+		default 12345
+		range 1 65535
 endmenu

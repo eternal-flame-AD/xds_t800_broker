@@ -40,6 +40,7 @@ target_sources(app PRIVATE
   src/ant_profiles.c
   src/ant_bike_power.c
   src/shell_ant_slave.c
+  src/shell_ant_master.c
   src/shell_flush.c
   src/shell_bt.c
   src/shell_poweroff.c
