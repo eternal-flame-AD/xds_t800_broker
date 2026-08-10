@@ -23,7 +23,7 @@ void enter_poweroff(void) {
   int err = 0;
   bool wakeup_success = false;
 
-  while (0) {
+  do {
     uint8_t num_wakeup_channels = 0;
     for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
       if (!(antplus_wakeup_slave_config[i].device_number &&
@@ -80,7 +80,7 @@ void enter_poweroff(void) {
       }
       wakeup_success = true;
     }
-  }
+  } while (0);
 
   if (wakeup_success) {
     sys_reboot(SYS_REBOOT_COLD);

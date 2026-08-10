@@ -2,9 +2,6 @@
 
 #include <zephyr/bluetooth/gatt.h>
 
-void mtu_exchange_func(struct bt_conn *conn, uint8_t att_err,
-                       struct bt_gatt_exchange_params *params);
-
 void on_subscribed_check_success(struct bt_conn *conn, uint8_t status,
                                  struct bt_gatt_subscribe_params *params);
 

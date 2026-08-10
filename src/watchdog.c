@@ -2,12 +2,11 @@
 #include "bootloader.h"
 #include "leds.h"
 #include "zephyr/toolchain.h"
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/fatal.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
-
-LOG_MODULE_REGISTER(watchdog, LOG_LEVEL_INF);
 
 const struct device *watchdog_dev = DEVICE_DT_GET(DT_NODELABEL(wdt));
 
@@ -17,6 +16,8 @@ const struct wdt_timeout_cfg watchdog_timeout_cfg = {
 };
 
 static int channel = -1;
+
+static uint32_t reset_reason = 0;
 
 #if !IS_ENABLED(CONFIG_RESET_ON_FATAL_ERROR)
 void k_sys_fatal_error_handler(unsigned int reason,
@@ -38,9 +39,16 @@ void k_sys_fatal_error_handler(unsigned int reason,
 #endif
 
 int watchdog_init(void) {
+  int err = hwinfo_get_reset_cause(&reset_reason);
+  if (err == 0) {
+    if (reset_reason & (RESET_WATCHDOG | RESET_CPU_LOCKUP)) {
+      bootloader_enter();
+    }
+    hwinfo_clear_reset_cause();
+  }
+
   channel = wdt_install_timeout(watchdog_dev, &watchdog_timeout_cfg);
   if (channel < 0) {
-    LOG_ERR("Failed to get watchdog channel (%d)", channel);
     return 0;
   }
   wdt_setup(watchdog_dev, WDT_OPT_PAUSE_HALTED_BY_DBG);
@@ -54,3 +62,5 @@ void watchdog_feed(void) {
   if (channel >= 0)
     wdt_feed(watchdog_dev, channel);
 }
+
+uint32_t watchdog_get_reset_reason(void) { return reset_reason; }

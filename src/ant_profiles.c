@@ -2,6 +2,8 @@
 #include "ant_bike_power.h"
 #include <ant_channel_config.h>
 #include <stdlib.h>
+
+#undef RESET_POR
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>

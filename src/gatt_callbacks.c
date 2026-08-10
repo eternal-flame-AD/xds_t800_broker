@@ -8,16 +8,6 @@
 
 LOG_MODULE_REGISTER(gatt_callbacks, CONFIG_BT_GATT_LOG_LEVEL);
 
-void mtu_exchange_func(struct bt_conn *conn, uint8_t att_err,
-                       struct bt_gatt_exchange_params *params) {
-  LOG_INF("MTU exchange %s", att_err == 0 ? "successful" : "failed");
-  if (!att_err) {
-    uint16_t payload_mtu =
-        bt_gatt_get_mtu(conn) - 3; // 3 bytes used for Attribute headers.
-    LOG_INF("New MTU: %d bytes", payload_mtu);
-  }
-}
-
 void on_subscribed_check_success(struct bt_conn *conn, uint8_t status,
                                  struct bt_gatt_subscribe_params *params) {
   if (status != 0) {

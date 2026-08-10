@@ -1,8 +1,6 @@
 #pragma once
 
-#undef RESET_POR
 #include <ant_channel_config.h>
-#undef RESET_POR
 
 #define SETTINGS_ANT_SUBTREE "ant"
 #define SETTINGS_ANT_WAKEUP_SEGMENT "wakeup"

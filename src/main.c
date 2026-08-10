@@ -3,7 +3,6 @@
 #include <sys/errno.h>
 
 #include <bluetooth/gatt_dm.h>
-#include <helpers/nrfx_reset_reason.h>
 #include <shell/shell_bt_nus.h>
 
 #include <ant_key_manager.h>
@@ -38,13 +37,11 @@
 #include "central_profile.h"
 #include "central_t800.h"
 #include "gatt_battery.h"
-#include "gatt_callbacks.h"
 #include "gatt_system_info.h"
 #include "leds.h"
 #include "poweroff.h"
 #include "shell_ant_slave.h"
 #include "watchdog.h"
-#include "zephyr/sys/byteorder.h"
 
 #include "main.h"
 
@@ -180,13 +177,24 @@ central_profile_instance_get(struct bt_conn *conn) {
   return NULL;
 }
 
+static void mtu_exchange_func(struct bt_conn *conn, uint8_t att_err,
+                              struct bt_gatt_exchange_params *params) {
+  if (att_err) {
+    LOG_WRN("MTU exchange faled (err %d)", att_err);
+  } else {
+    uint16_t payload_mtu =
+        bt_gatt_get_mtu(conn) - 3; // 3 bytes used for Attribute headers.
+    LOG_INF("New MTU: %d bytes", payload_mtu);
+  }
+}
+
 static struct bt_gatt_exchange_params mtu_exchange_params = {
     .func = mtu_exchange_func,
 };
 
 int64_t last_button_press_time = 0;
 
-void start_pairing_mode_work_handler(struct k_work *work) {
+static void start_pairing_mode_work_handler(struct k_work *work) {
   LOG_INF("Long press detected, entering pairing mode");
   for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
     bt_addr_le_copy(&central_profile_instances[i].known_peer, BT_ADDR_LE_ANY);
@@ -204,7 +212,7 @@ void start_pairing_mode_work_handler(struct k_work *work) {
 K_WORK_DELAYABLE_DEFINE(start_pairing_mode_work,
                         start_pairing_mode_work_handler);
 
-void btn_handler_fn(uint32_t button_state, uint32_t has_changed) {
+static void btn_handler_fn(uint32_t button_state, uint32_t has_changed) {
   button_state &= 1;
   has_changed &= 1;
   LOG_INF("Button state: %d, has_changed: %d", button_state, has_changed);
@@ -892,12 +900,9 @@ int bt_setup(void) {
 int main_loop(void) {
   int err;
   bool low_batt = false;
-  uint32_t reset_reason = nrfx_reset_reason_get();
-  if (reset_reason & NRFX_RESET_REASON_DOG_MASK) {
-    bootloader_enter();
-  }
 
   LOG_INIT();
+  LOG_INF("Reset reason: %d", watchdog_get_reset_reason());
 
   err = battery_gauge_setup();
   if (err) {
