@@ -38,6 +38,7 @@
 #include "central_t800.h"
 #include "gatt_battery.h"
 #include "gatt_system_info.h"
+#include "host/scan.h"
 #include "leds.h"
 #include "poweroff.h"
 #include "shell_ant_slave.h"
@@ -414,6 +415,9 @@ static int scan_start(void) {
   if (!is_central_slot_open()) {
     return 0;
   }
+  if (bt_le_explicit_scanner_running()) {
+    bt_le_scan_stop();
+  }
 
   int err;
 
@@ -479,7 +483,7 @@ static void adv_work_handler(struct k_work *work) {
                       BT_GAP_MS_TO_ADV_INTERVAL(600), NULL),
       ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 
-  if (err) {
+  if (err && err != -EALREADY) {
     LOG_ERR("Advertising failed to start (err %d)", err);
     return;
   }
@@ -586,10 +590,12 @@ static void pairing_complete(struct bt_conn *conn, bool bonded) {
 
   LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
   if (bonded) {
+    bt_le_scan_stop();
     int err = bt_le_filter_accept_list_add(bt_conn_get_dst(conn));
     if (err) {
       LOG_ERR("Failed to add peer to filter accept list (err %d)", err);
     }
+    scan_start();
   }
 }
 
