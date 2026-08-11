@@ -1,6 +1,4 @@
 #include "gatt_callbacks.h"
-#include "ant_bike_power.h"
-#include "ant_profiles.h"
 #include "zephyr/bluetooth/conn.h"
 #include "zephyr/bluetooth/hci_types.h"
 #include "zephyr/sys/byteorder.h"
@@ -18,14 +16,6 @@ void on_subscribed_check_success(struct bt_conn *conn, uint8_t status,
 
 void bt_ccc_write_cb(const struct bt_gatt_attr *attr, const uint16_t value) {
   LOG_DBG("notify CCC write: %d", value);
-}
-
-void calibration_write_cb(struct bt_conn *conn, uint8_t err,
-                          struct bt_gatt_write_params *params) {
-  if (err != 0) {
-    LOG_ERR("Calibration write failed: %d", err);
-    ant_bike_power_calib_response(&bike_power, false, -3);
-  }
 }
 
 ssize_t gatt_read_u8_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,

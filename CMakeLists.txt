@@ -48,6 +48,7 @@ target_sources(app PRIVATE
   src/battery_gauge.c
   src/watchdog.c
   src/poweroff.c
+  src/crank_sim.c
   src/cdc_acm_serial.c
   src/main.c
 )

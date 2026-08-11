@@ -3,6 +3,7 @@
 #include <stdalign.h>
 #include <stdatomic.h>
 #include <sys/errno.h>
+#include <sys/types.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
@@ -10,10 +11,12 @@
 #include "ant_bike_power.h"
 #include "ant_interface.h"
 #include "ant_profiles.h"
+#include "crank_sim.h"
 #include "gatt_battery.h"
 #include "gatt_callbacks.h"
 #include "leds.h"
 #include "zephyr/bluetooth/gatt.h"
+#include "zephyr/kernel.h"
 
 #define STUCK_SENSOR_TIMER_INTERVAL_MS 500
 #define STUCK_SENSOR_REBOOT_TIMEOUT_MS 15000
@@ -35,7 +38,13 @@ BT_GATT_SERVICE_DEFINE(
 
 static const uint8_t sensor_location = 6;
 static const uint32_t cycling_power_feature =
-    BIT(0); //  Pedal Power Balance Supported
+    BIT(0) | BIT(3) |
+    BIT(9); //  Pedal Power Balance Supported, Cranks Revolution
+            //  Supported, Offset Compensation Supported
+
+static ssize_t cpcp_write_cb(struct bt_conn *conn,
+                             const struct bt_gatt_attr *attr, const void *buf,
+                             uint16_t len, uint16_t offset, uint8_t flags);
 
 BT_GATT_SERVICE_DEFINE(
     cps_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_CPS),
@@ -47,7 +56,11 @@ BT_GATT_SERVICE_DEFINE(
                            (void *)&cycling_power_feature),
     BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_LOCATION, BT_GATT_CHRC_READ,
                            BT_GATT_PERM_READ, gatt_read_u8_cb, NULL,
-                           (void *)&sensor_location));
+                           (void *)&sensor_location),
+    BT_GATT_CHARACTERISTIC(BT_UUID_GATT_CPS_CPCP,
+                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_INDICATE,
+                           BT_GATT_PERM_WRITE, NULL, cpcp_write_cb, NULL),
+    BT_GATT_CCC(bt_ccc_write_cb, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE));
 
 static _Atomic uint8_t calibration_result_pending = 0;
 
@@ -58,6 +71,8 @@ static const uint8_t calibration_cmd[] = {0x02, 0x16, 0xaa, 0x10};
 static uint16_t last_power = UINT16_MAX;
 
 static struct bt_conn *central_conn = NULL;
+
+static struct crank_sim_s crank_sim = {0};
 
 void cps_stuck_sensor_timer_handler(struct k_timer *timer_id) {
   struct bt_conn *conn = (struct bt_conn *)k_timer_user_data_get(timer_id);
@@ -77,6 +92,9 @@ K_TIMER_DEFINE(cps_stuck_sensor_timer, cps_stuck_sensor_timer_handler, NULL);
 static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
                                  struct bt_gatt_read_params *params,
                                  const void *data, uint16_t length);
+
+static void calibration_write_cb(struct bt_conn *conn, uint8_t err,
+                                 struct bt_gatt_write_params *params);
 
 static uint8_t read_dis_serial_number_cb(struct bt_conn *conn, uint8_t err,
                                          struct bt_gatt_read_params *params,
@@ -132,6 +150,68 @@ static struct bt_gatt_write_params calibration_write_params = {
     .handle = 0,
     .offset = 0,
 };
+
+static uint8_t cpcp_data_buf[1 + 1 + 1 + 2] = {0};
+
+static void
+cpcp_indicate_params_destroy(struct bt_gatt_indicate_params *params) {
+  memset(cpcp_data_buf, 0, sizeof(cpcp_data_buf));
+}
+
+static struct bt_gatt_indicate_params cpcp_indicate_params = {
+    .uuid = BT_UUID_GATT_CPS_CPCP,
+    .attr = cps_service.attrs,
+    .destroy = cpcp_indicate_params_destroy,
+    .data = cpcp_data_buf,
+    .len = sizeof(cpcp_data_buf)};
+
+static ssize_t cpcp_write_cb(struct bt_conn *conn,
+                             const struct bt_gatt_attr *attr, const void *buf,
+                             uint16_t len, uint16_t offset, uint8_t flags) {
+  if (flags & BT_GATT_WRITE_FLAG_PREPARE) {
+    return 0;
+  }
+  if (!len || offset != 0) {
+    return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+  }
+  uint8_t opcode = *(uint8_t *)buf;
+  cpcp_data_buf[0] = 0x20;
+  cpcp_data_buf[1] = opcode;
+
+  if (opcode == 0x0c) {
+    int err = central_t800_offset_compensation_start();
+    if (err < 0) {
+      cpcp_data_buf[2] = 0x04;
+      cpcp_indicate_params.len = 3;
+      if (bt_gatt_indicate(conn, &cpcp_indicate_params) != 0) {
+        cpcp_indicate_params_destroy(&cpcp_indicate_params);
+      }
+    }
+  } else {
+    cpcp_data_buf[2] = 0x02;
+    cpcp_indicate_params.len = 3;
+    if (bt_gatt_indicate(conn, &cpcp_indicate_params) != 0) {
+      cpcp_indicate_params_destroy(&cpcp_indicate_params);
+    }
+  }
+  return len;
+}
+
+static void calibration_write_cb(struct bt_conn *conn, uint8_t err,
+                                 struct bt_gatt_write_params *params) {
+  if (err != 0) {
+    LOG_ERR("Calibration write failed: %d", err);
+    ant_bike_power_calib_response(&bike_power, false, -3);
+    if (cpcp_data_buf[0] == 0x20) {
+      cpcp_data_buf[2] = 0x04;
+      cpcp_indicate_params.len = 3;
+      if (bt_gatt_indicate(NULL, &cpcp_indicate_params) != 0) {
+        cpcp_indicate_params_destroy(&cpcp_indicate_params);
+      }
+    }
+  }
+  LOG_INF("Calibration write successful");
+}
 
 static struct bt_gatt_subscribe_params cpm_sub_params = {0};
 static struct bt_gatt_subscribe_params sc_cp_sub_params = {0};
@@ -190,6 +270,17 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
   ant_bike_power_update_temp_and_weight(&bike_power, temp, weight);
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
     ant_bike_power_calib_response(&bike_power, true, internal_calibration_data);
+    if (cpcp_data_buf[0] == 0x20) {
+      cpcp_data_buf[2] = 0x01;
+      cpcp_data_buf[3] = internal_calibration_data & 0xFF;
+      cpcp_data_buf[4] = internal_calibration_data >> 8;
+      cpcp_indicate_params.len = 5;
+      int err = bt_gatt_indicate(NULL, &cpcp_indicate_params);
+      if (err != 0) {
+        LOG_ERR("Failed to indicate calibration result: %d", err);
+        cpcp_indicate_params_destroy(&cpcp_indicate_params);
+      }
+    }
   }
 
   return BT_GATT_ITER_STOP;
@@ -244,9 +335,25 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
         }
       }
       ant_bike_power_calib_response(&bike_power, true, 0);
+      if (cpcp_data_buf[0] == 0x20) {
+        cpcp_data_buf[2] = 0x01;
+        cpcp_data_buf[3] = 0xff;
+        cpcp_data_buf[4] = 0xff;
+        cpcp_indicate_params.len = 5;
+        if (bt_gatt_indicate(NULL, &cpcp_indicate_params) != 0) {
+          cpcp_indicate_params_destroy(&cpcp_indicate_params);
+        }
+      }
     } else {
       LOG_ERR("SC CP calibration failed (%d)", status);
       ant_bike_power_calib_response(&bike_power, false, status);
+      if (cpcp_data_buf[0] == 0x20) {
+        cpcp_data_buf[2] = 0x04;
+        cpcp_indicate_params.len = 3;
+        if (bt_gatt_indicate(NULL, &cpcp_indicate_params) != 0) {
+          cpcp_indicate_params_destroy(&cpcp_indicate_params);
+        }
+      }
     }
   }
 
@@ -257,7 +364,6 @@ static uint8_t
 bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
                             struct bt_gatt_subscribe_params *params,
                             const void *data, uint16_t length) {
-
   if (!data) {
     LOG_ERR("CPS CPM notify: ended");
     return BT_GATT_ITER_STOP;
@@ -269,10 +375,11 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
   uint8_t *incoming = (uint8_t *)data;
 
   if (length >= 11) {
-    uint64_t now = k_uptime_get();
-    last_data_ms = now;
-    uint8_t out[5] = {0};
-    out[0] = 0b11; // power balance present, reference left
+    int64_t now_ticks = k_uptime_ticks();
+    last_data_ms = k_uptime_get();
+    uint8_t out[9] = {0};
+    out[0] = BIT(0) | BIT(1) | BIT(5); // power balance present, reference left,
+                                       // cranks revolution supported
     out[1] = 0;
     memcpy(out + 2, incoming, 2);
     uint16_t totPower = incoming[0] | (incoming[1] << 8); // total power (watts)
@@ -313,6 +420,17 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
 
     ant_bike_power_update(&bike_power, totPower, (200 - out[4]) / 2,
                           cadence < 0 ? 0 : cadence, angle);
+
+    if (cadence > 0) {
+      crank_sim_update(&crank_sim, cadence, now_ticks);
+    }
+
+    struct bt_crank_revolution_s bt_data;
+    crank_sim_get_bt_data(&crank_sim, &bt_data);
+    out[5] = bt_data.crank_revolution & 0xFF;
+    out[6] = (bt_data.crank_revolution >> 8) & 0xFF;
+    out[7] = bt_data.last_crank_time & 0xFF;
+    out[8] = (bt_data.last_crank_time >> 8) & 0xFF;
 
     bt_gatt_notify_uuid(NULL, BT_UUID_GATT_CPS_CPM, cps_service.attrs, out,
                         sizeof(out));

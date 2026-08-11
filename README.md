@@ -9,11 +9,10 @@ Measurement Service so that regular head units can read it.
 ## Features
 
 - Low power consumption suitable for touring (<15 mW when USB is not enumerated).
-- Power and power balance readout
+- Power, cadence and power balance readout
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
-- Cadence readout (ANT+ only)
-- Offset compensation (calibration) support with offset readback (ANT+ only, tested on a Garmin Edge 1050)
+- Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
 
 ## Requirements
 
