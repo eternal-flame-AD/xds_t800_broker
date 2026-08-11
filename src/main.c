@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/errno.h>
@@ -64,6 +65,8 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
                           BT_GAP_SCAN_FAST_WINDOW)
 
 static uint8_t connection_attempt_count = 0;
+static _Atomic uint8_t peripheral_remaining =
+    CONFIG_BT_CTLR_SDC_PERIPHERAL_COUNT;
 
 struct central_profile_instance {
   const struct central_profile *profile;
@@ -491,7 +494,11 @@ static void adv_work_handler(struct k_work *work) {
   LOG_INF("Advertising successfully started");
 }
 
-static void advertising_start(void) { k_work_submit(&adv_work); }
+static void advertising_start(void) {
+  if (atomic_load(&peripheral_remaining) > 0) {
+    k_work_submit(&adv_work);
+  }
+}
 
 static void discovery_completed_cb(struct bt_gatt_dm *dm, void *context) {
   int err;
@@ -632,6 +639,8 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
     .pairing_complete = pairing_complete,
     .pairing_failed = pairing_failed};
 
+static struct bt_conn *nus_conn = NULL;
+
 static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
   int err;
   char addr[BT_ADDR_LE_STR_LEN];
@@ -692,9 +701,8 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       return;
     }
   } else {
-    advertising_start();
-    shell_bt_nus_enable(conn);
-    bt_conn_set_security(conn, BT_SECURITY_L4);
+    if (atomic_fetch_sub(&peripheral_remaining, 1) > 0)
+      advertising_start();
     bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
   }
 }
@@ -727,7 +735,11 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
     if (conn)
       bt_conn_unref(conn);
   } else {
-    shell_bt_nus_disable();
+    if (atomic_ptr_cas((void **)&nus_conn, (void *)conn, NULL)) {
+      shell_bt_nus_disable();
+    }
+    bt_conn_unref(conn);
+    atomic_fetch_add(&peripheral_remaining, 1);
   }
 }
 
@@ -739,12 +751,18 @@ static void on_security_changed(struct bt_conn *conn, bt_security_t level,
 
   if (!err) {
     LOG_INF("Security changed: %s level %u", addr, level);
+    if (level == BT_SECURITY_L4) {
+      if (atomic_ptr_cas((void **)&nus_conn, NULL, (void *)conn)) {
+        shell_bt_nus_enable(conn);
+      }
+    }
   } else {
     LOG_ERR("Security failed: %s level %u err %d", addr, level, err);
   }
 }
 
 static void on_conn_recycled(void) {
+  LOG_INF("Connection recycled");
   advertising_start();
 
   scan_start();

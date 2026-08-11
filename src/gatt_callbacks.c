@@ -1,6 +1,7 @@
 #include "gatt_callbacks.h"
 #include "zephyr/bluetooth/conn.h"
 #include "zephyr/bluetooth/hci_types.h"
+#include "zephyr/bluetooth/uuid.h"
 #include "zephyr/sys/byteorder.h"
 #include <zephyr/logging/log.h>
 
@@ -15,7 +16,9 @@ void on_subscribed_check_success(struct bt_conn *conn, uint8_t status,
 }
 
 void bt_ccc_write_cb(const struct bt_gatt_attr *attr, const uint16_t value) {
-  LOG_DBG("notify CCC write: %d", value);
+  char uuid_str[BT_UUID_STR_LEN];
+  bt_uuid_to_str((attr - 1)->uuid, uuid_str, sizeof(uuid_str));
+  LOG_INF("notify CCC write: %d %s", value, uuid_str);
 }
 
 ssize_t gatt_read_u8_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,

@@ -38,9 +38,10 @@ BT_GATT_SERVICE_DEFINE(
 
 static const uint8_t sensor_location = 6;
 static const uint32_t cycling_power_feature =
-    BIT(0) | BIT(3) |
-    BIT(9); //  Pedal Power Balance Supported, Cranks Revolution
-            //  Supported, Offset Compensation Supported
+    BIT(0) | BIT(3) | BIT(9) |
+    BIT(20); //  Pedal Power Balance Supported, Cranks Revolution
+             //  Supported, Offset Compensation Supported
+             //  Not for use in a distributed system
 
 static ssize_t cpcp_write_cb(struct bt_conn *conn,
                              const struct bt_gatt_attr *attr, const void *buf,
@@ -153,6 +154,8 @@ static struct bt_gatt_write_params calibration_write_params = {
 
 static uint8_t cpcp_data_buf[1 + 1 + 1 + 2] = {0};
 
+static struct bt_conn *offset_compensation_conn = NULL;
+
 static void
 cpcp_indicate_params_destroy(struct bt_gatt_indicate_params *params) {
   memset(cpcp_data_buf, 0, sizeof(cpcp_data_buf));
@@ -179,12 +182,15 @@ static ssize_t cpcp_write_cb(struct bt_conn *conn,
   cpcp_data_buf[1] = opcode;
 
   if (opcode == 0x0c) {
-    int err = central_t800_offset_compensation_start();
+    int err = -EALREADY;
+    if (atomic_ptr_cas((void **)&offset_compensation_conn, NULL, (void *)conn))
+      err = central_t800_offset_compensation_start();
     if (err < 0) {
       cpcp_data_buf[2] = 0x04;
       cpcp_indicate_params.len = 3;
       if (bt_gatt_indicate(conn, &cpcp_indicate_params) != 0) {
         cpcp_indicate_params_destroy(&cpcp_indicate_params);
+        atomic_ptr_clear((void **)&offset_compensation_conn);
       }
     }
   } else {
@@ -205,7 +211,10 @@ static void calibration_write_cb(struct bt_conn *conn, uint8_t err,
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x04;
       cpcp_indicate_params.len = 3;
-      if (bt_gatt_indicate(NULL, &cpcp_indicate_params) != 0) {
+      struct bt_conn *peripheral_conn =
+          atomic_ptr_clear((void **)&offset_compensation_conn);
+      if (peripheral_conn &&
+          bt_gatt_indicate(peripheral_conn, &cpcp_indicate_params) != 0) {
         cpcp_indicate_params_destroy(&cpcp_indicate_params);
       }
     }
@@ -275,10 +284,14 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
       cpcp_data_buf[3] = internal_calibration_data & 0xFF;
       cpcp_data_buf[4] = internal_calibration_data >> 8;
       cpcp_indicate_params.len = 5;
-      int err = bt_gatt_indicate(NULL, &cpcp_indicate_params);
-      if (err != 0) {
-        LOG_ERR("Failed to indicate calibration result: %d", err);
-        cpcp_indicate_params_destroy(&cpcp_indicate_params);
+      struct bt_conn *peripheral_conn =
+          atomic_ptr_clear((void **)&offset_compensation_conn);
+      if (peripheral_conn) {
+        int err = bt_gatt_indicate(peripheral_conn, &cpcp_indicate_params);
+        if (err != 0) {
+          LOG_ERR("Failed to indicate calibration result: %d", err);
+          cpcp_indicate_params_destroy(&cpcp_indicate_params);
+        }
       }
     }
   }
@@ -340,7 +353,10 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
         cpcp_data_buf[3] = 0xff;
         cpcp_data_buf[4] = 0xff;
         cpcp_indicate_params.len = 5;
-        if (bt_gatt_indicate(NULL, &cpcp_indicate_params) != 0) {
+        struct bt_conn *peripheral_conn =
+            atomic_ptr_clear((void **)&offset_compensation_conn);
+        if (peripheral_conn &&
+            bt_gatt_indicate(peripheral_conn, &cpcp_indicate_params) != 0) {
           cpcp_indicate_params_destroy(&cpcp_indicate_params);
         }
       }
@@ -350,7 +366,10 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
       if (cpcp_data_buf[0] == 0x20) {
         cpcp_data_buf[2] = 0x04;
         cpcp_indicate_params.len = 3;
-        if (bt_gatt_indicate(NULL, &cpcp_indicate_params) != 0) {
+        struct bt_conn *peripheral_conn =
+            atomic_ptr_clear((void **)&offset_compensation_conn);
+        if (peripheral_conn &&
+            bt_gatt_indicate(peripheral_conn, &cpcp_indicate_params) != 0) {
           cpcp_indicate_params_destroy(&cpcp_indicate_params);
         }
       }
@@ -599,6 +618,21 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   ant_channel_close(bpwr_diag_channel_config.channel_number);
   k_timer_stop(&cps_stuck_sensor_timer);
   k_timer_user_data_set(&cps_stuck_sensor_timer, NULL);
+  if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
+    ant_bike_power_calib_response(&bike_power, true, 0);
+    if (cpcp_data_buf[0] == 0x20) {
+      cpcp_data_buf[2] = 0x01;
+      cpcp_data_buf[3] = 0xff;
+      cpcp_data_buf[4] = 0xff;
+      cpcp_indicate_params.len = 5;
+      struct bt_conn *peripheral_conn =
+          atomic_ptr_clear((void **)&offset_compensation_conn);
+      if (peripheral_conn &&
+          bt_gatt_indicate(peripheral_conn, &cpcp_indicate_params) != 0) {
+        cpcp_indicate_params_destroy(&cpcp_indicate_params);
+      }
+    }
+  }
 }
 
 const struct central_profile central_t800_profile = {

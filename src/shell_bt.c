@@ -22,6 +22,31 @@ static void find_bond_type_cb(const struct bt_bond_info *info,
   }
 }
 
+static void print_conn_cb(struct bt_conn *conn, void *user_data) {
+  const struct shell *shell = user_data;
+  char addr[BT_ADDR_LE_STR_LEN];
+  int err;
+
+  const bt_addr_le_t *dst = bt_conn_get_dst(conn);
+  bt_addr_le_to_str(dst, addr, sizeof(addr));
+
+  struct bt_conn_info conn_info = {0};
+  err = bt_conn_get_info(conn, &conn_info);
+  if (err != 0) {
+    shell_error(shell, "Failed to get connection info: %d", err);
+    return;
+  }
+  shell_print(shell, "Connection: %s (%s, %s)", addr,
+              conn_info.role == BT_CONN_ROLE_CENTRAL      ? "Central"
+              : conn_info.role == BT_CONN_ROLE_PERIPHERAL ? "Peripheral"
+                                                          : "Unknown",
+              conn_info.state == BT_CONN_STATE_CONNECTED       ? "Connected"
+              : conn_info.state == BT_CONN_STATE_DISCONNECTED  ? "Disconnected"
+              : conn_info.state == BT_CONN_STATE_DISCONNECTING ? "Disconnecting"
+              : conn_info.state == BT_CONN_STATE_CONNECTING    ? "Connecting"
+                                                               : "Unknown");
+}
+
 static int shell_bt_cmd_handler(const struct shell *shell, size_t argc,
                                 char **argv) {
   char addr_str[BT_ADDR_LE_STR_LEN];
@@ -38,6 +63,8 @@ static int shell_bt_cmd_handler(const struct shell *shell, size_t argc,
   }
   shell_print(shell, "Bonds:");
   bt_foreach_bond(BT_ID_DEFAULT, print_bond_cb, (void *)shell);
+  shell_print(shell, "Connections:");
+  bt_conn_foreach(BT_CONN_TYPE_LE, print_conn_cb, (void *)shell);
 
   return -EINVAL;
 }
