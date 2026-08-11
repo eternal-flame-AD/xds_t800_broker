@@ -29,6 +29,7 @@
 
 #include <dk_buttons_and_leds.h>
 
+#include "advertiser.h"
 #include "ant_init.h"
 #include "ant_parameters.h"
 #include "ant_profiles.h"
@@ -39,7 +40,6 @@
 #include "central_t800.h"
 #include "gatt_battery.h"
 #include "gatt_system_info.h"
-#include "host/scan.h"
 #include "leds.h"
 #include "poweroff.h"
 #include "shell_ant_slave.h"
@@ -65,8 +65,6 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
                           BT_GAP_SCAN_FAST_WINDOW)
 
 static uint8_t connection_attempt_count = 0;
-static _Atomic uint8_t peripheral_remaining =
-    CONFIG_BT_CTLR_SDC_PERIPHERAL_COUNT;
 
 struct central_profile_instance {
   const struct central_profile *profile;
@@ -418,9 +416,7 @@ static int scan_start(void) {
   if (!is_central_slot_open()) {
     return 0;
   }
-  if (bt_le_explicit_scanner_running()) {
-    bt_le_scan_stop();
-  }
+  bt_le_scan_stop();
 
   int err;
 
@@ -462,43 +458,9 @@ static int scan_start(void) {
   return err;
 }
 
-static const struct bt_data ad[] = {
-    BT_DATA_BYTES(BT_DATA_GAP_APPEARANCE,
-                  (CONFIG_BT_DEVICE_APPEARANCE >> 0) & 0xff,
-                  (CONFIG_BT_DEVICE_APPEARANCE >> 8) & 0xff),
-    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_CPS_VAL),
-                  BT_UUID_16_ENCODE(BT_UUID_BAS_VAL)),
-};
-
-static const struct bt_data sd[] = {
-    BT_DATA_BYTES(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME)};
-
-static struct k_work adv_work;
-
 uint8_t bt_gatt_discover_cb(struct bt_conn *conn,
                             const struct bt_gatt_attr *attr,
                             struct bt_gatt_discover_params *params);
-
-static void adv_work_handler(struct k_work *work) {
-  int err = bt_le_adv_start(
-      BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, BT_GAP_MS_TO_ADV_INTERVAL(400),
-                      BT_GAP_MS_TO_ADV_INTERVAL(600), NULL),
-      ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-
-  if (err && err != -EALREADY) {
-    LOG_ERR("Advertising failed to start (err %d)", err);
-    return;
-  }
-
-  LOG_INF("Advertising successfully started");
-}
-
-static void advertising_start(void) {
-  if (atomic_load(&peripheral_remaining) > 0) {
-    k_work_submit(&adv_work);
-  }
-}
 
 static void discovery_completed_cb(struct bt_gatt_dm *dm, void *context) {
   int err;
@@ -701,8 +663,7 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       return;
     }
   } else {
-    if (atomic_fetch_sub(&peripheral_remaining, 1) > 0)
-      advertising_start();
+    advertising_start();
     bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
   }
 }
@@ -739,7 +700,6 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
       shell_bt_nus_disable();
     }
     bt_conn_unref(conn);
-    atomic_fetch_add(&peripheral_remaining, 1);
   }
 }
 
@@ -791,8 +751,8 @@ static void ant_evt_handler(ant_evt_t *p_ant_evt) {
   if (p_ant_evt->channel == bpwr_channel_config.channel_number) {
     ant_bike_power_evt_handler(p_ant_evt, &bike_power);
     return;
-  } else if (p_ant_evt->channel == bpwr_diag_channel_config.channel_number) {
-    ant_bike_power_diag_evt_handler(p_ant_evt, &bike_power);
+  } else if (p_ant_evt->channel == bpwr_environ_channel_config.channel_number) {
+    ant_environ_evt_handler(p_ant_evt, &environ);
     return;
   } else if (p_ant_evt->channel ==
              antplus_generic_slave_config.channel_number) {
@@ -837,12 +797,6 @@ static int ant_stack_setup(void) {
     return err;
   }
 
-  err = ant_bike_power_diag_key_set(ANT_NETWORK_BPWR_DIAG);
-  if (err) {
-    LOG_ERR("ant_bike_power_diag_key_set failed: %d", err);
-    return err;
-  }
-
   return 0;
 }
 
@@ -851,12 +805,15 @@ static int ant_profile_setup(void) {
 
   ant_bike_power_init(&bike_power, central_t800_offset_compensation_start_ant);
 
-  err = ant_channel_init(&bpwr_channel_config);
+  ant_environ_init(&environ);
+
+  err = ant_channel_init(&bpwr_environ_channel_config);
   if (err) {
     LOG_ERR("ant_channel_init failed: %d", err);
     return err;
   }
-  err = ant_channel_init(&bpwr_diag_channel_config);
+
+  err = ant_channel_init(&bpwr_channel_config);
   if (err) {
     LOG_ERR("ant_channel_init failed: %d", err);
     return err;
@@ -890,9 +847,7 @@ int bt_setup(void) {
     return err;
   }
 
-  if (IS_ENABLED(CONFIG_SETTINGS)) {
-    settings_load();
-  }
+  settings_load();
 
   err = bt_le_filter_accept_list_clear();
   if (err) {
@@ -970,8 +925,6 @@ int main_loop(void) {
     return err;
   }
 
-  k_work_init(&adv_work, adv_work_handler);
-
   err = bt_setup();
   if (err) {
     LOG_ERR("BT setup failed (err %d)", err);
@@ -1016,6 +969,9 @@ int main_loop(void) {
             CONFIG_AUTO_POWER_OFF_TIMEOUT * 1000) {
       LOG_INF("Auto power off triggered");
       enter_poweroff();
+      watchdog_feed();
+      advertising_start();
+      scan_start();
     }
 #endif
 

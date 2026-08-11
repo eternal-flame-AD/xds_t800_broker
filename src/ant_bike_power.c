@@ -8,8 +8,6 @@
 #include <zephyr/kernel.h>
 
 static uint8_t page_ctr = 0;
-static uint8_t ant_bike_power_diag_network_key[] = {0xf8, 0x06, 0xc1, 0x4b,
-                                                    0x86, 0x1a, 0x0d, 0xd9};
 
 #define BATT_IDX_REMOTE (0)
 #define BATT_IDX_SELF (1)
@@ -18,11 +16,6 @@ static uint8_t ant_bike_power_diag_network_key[] = {0xf8, 0x06, 0xc1, 0x4b,
 
 static void calibration_unsupported_stub(struct ant_bike_power_s *profile) {
   ant_bike_power_calib_response(profile, false, -ENOTSUP);
-}
-
-ant_err_t ant_bike_power_diag_key_set(uint8_t network_number) {
-  return ant_network_address_set(network_number,
-                                 ant_bike_power_diag_network_key);
 }
 
 void ant_bike_power_set_serial_number(struct ant_bike_power_s *profile,
@@ -92,16 +85,6 @@ void ant_bike_power_set_self_battery_state(struct ant_bike_power_s *profile,
   profile->battery_voltage_self = voltage_mv;
 }
 
-void ant_bike_power_update_temp_and_weight(struct ant_bike_power_s *profile,
-                                           int8_t temperature,
-                                           int16_t force_kgf) {
-  k_mutex_lock(&profile->update_mutex, K_FOREVER);
-  profile->temperature = temperature;
-  profile->force_kgf = force_kgf;
-  profile->diag_time_diff = k_uptime_get() - profile->last_power_update_time;
-  k_mutex_unlock(&profile->update_mutex);
-}
-
 void ant_bike_power_update(struct ant_bike_power_s *profile, uint16_t power,
                            uint8_t pwr_distribution_right,
                            uint8_t instantaneous_cadence, uint16_t angle) {
@@ -113,7 +96,6 @@ void ant_bike_power_update(struct ant_bike_power_s *profile, uint16_t power,
   profile->instantaneous_cadence = instantaneous_cadence;
   profile->last_update_event_count = profile->update_event_count;
   profile->update_event_count++;
-  profile->last_power_update_time = k_uptime_get();
   k_mutex_unlock(&profile->update_mutex);
 }
 
@@ -273,26 +255,5 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
   default:
     break;
   }
-  }
-}
-
-void ant_bike_power_diag_evt_handler(ant_evt_t *p_ant_evt,
-                                     struct ant_bike_power_s *profile) {
-  switch (p_ant_evt->event) {
-  case EVENT_TX: {
-    uint8_t output_payload[8];
-    output_payload[0] = 0x00;
-    output_payload[1] = profile->angle & 0xff;
-    output_payload[2] = profile->angle >> 8;
-    output_payload[3] = profile->temperature;
-    output_payload[4] = profile->force_kgf & 0xff;
-    output_payload[5] = profile->force_kgf >> 8;
-    output_payload[6] = profile->diag_time_diff & 0xff;
-    output_payload[7] = profile->diag_time_diff >> 8;
-    ant_broadcast_message_tx(p_ant_evt->channel, sizeof(output_payload),
-                             (uint8_t *)output_payload);
-  } break;
-  default:
-    break;
   }
 }

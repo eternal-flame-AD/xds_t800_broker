@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ant_bike_power.h"
+#include "ant_environ.h"
 #include <ant_channel_config.h>
 
 #define SETTINGS_ANT_SUBTREE "ant"
@@ -7,14 +9,14 @@
 #define SETTINGS_ANT_DEVICE_NUMBER_SEGMENT "device_number"
 
 #define ANT_NETWORK_ANTPLUS 0
-#define ANT_NETWORK_BPWR_DIAG 1
 
 #define ANT_WAKEUP_CHANNEL_SLOT_COUNT 2
 
 extern struct ant_bike_power_s bike_power;
+extern struct ant_environ_s environ;
 
 extern ant_channel_config_t bpwr_channel_config;
-extern ant_channel_config_t bpwr_diag_channel_config;
+extern ant_channel_config_t bpwr_environ_channel_config;
 extern ant_channel_config_t antplus_wakeup_slave_config[2];
 extern ant_channel_config_t antplus_generic_slave_config;
 

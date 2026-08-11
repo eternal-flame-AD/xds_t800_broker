@@ -2,6 +2,7 @@
 #include "ant_profiles.h"
 #include "leds.h"
 #include "watchdog.h"
+#include "zephyr/settings/settings.h"
 #include <ant_interface.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/logging/log.h>
@@ -83,7 +84,20 @@ void enter_poweroff(void) {
   } while (0);
 
   if (wakeup_success) {
-    sys_reboot(SYS_REBOOT_COLD);
+    err = bt_enable(NULL);
+    if (err != 0) {
+      LOG_ERR("Failed to enable Bluetooth (err %d)", err);
+      sys_reboot(SYS_REBOOT_COLD);
+    }
+    for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
+      ant_channel_close(antplus_wakeup_slave_config[i].channel_number);
+      ant_channel_unassign(antplus_wakeup_slave_config[i].channel_number);
+    }
+
+    settings_load();
+    led_set_bit(POWER_LED_BIT);
+
+    return;
   }
 
   led_clear_bit(POWER_LED_BIT);

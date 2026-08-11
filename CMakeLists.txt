@@ -34,11 +34,13 @@ project(xds_t800_broker)
 target_sources(app PRIVATE
   src/central_t800.c
   src/leds.c
+  src/advertiser.c
   src/gatt_callbacks.c
   src/gatt_battery.c
   src/gatt_system_info.c
   src/ant_profiles.c
   src/ant_bike_power.c
+  src/ant_environ.c
   src/shell_ant_slave.c
   src/shell_ant_master.c
   src/shell_flush.c

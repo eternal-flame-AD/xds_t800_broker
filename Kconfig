@@ -75,15 +75,6 @@ menu "Battery management"
 endmenu
 
 
-menu "Channel configuration"
-
-config BPWR_TX_DIAG_FREQUENCY
-	int "ANT+ diagnostic frequency"
-	default 60
-	range 0 124
-
-endmenu
-
 menu "ANT+ Product information"
 
 	config BPWR_TX_HW_VERSION

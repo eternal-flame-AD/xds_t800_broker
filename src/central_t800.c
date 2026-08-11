@@ -272,11 +272,11 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
       sign = '-';
       weight = ~weight + 1;
     }
+    ant_environ_temp_set(&environ, temp);
 
     LOG_INF("temp=%d, adj=%d, force=%c%d.%dkgF", temp,
             internal_calibration_data, sign, weight / 10, weight % 10);
   }
-  ant_bike_power_update_temp_and_weight(&bike_power, temp, weight);
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
     ant_bike_power_calib_response(&bike_power, true, internal_calibration_data);
     if (cpcp_data_buf[0] == 0x20) {
@@ -599,10 +599,9 @@ static void on_connected(struct bt_conn *conn) {
   if (err) {
     LOG_ERR("Failed to open main channel: %d", err);
   }
-  err = ant_channel_open_with_offset(bpwr_diag_channel_config.channel_number,
-                                     32768 * 200 / 1000);
+  err = ant_channel_open(bpwr_environ_channel_config.channel_number);
   if (err) {
-    LOG_ERR("Failed to open diagnostic channel: %d", err);
+    LOG_ERR("Failed to open environ channel: %d", err);
   }
   k_timer_user_data_set(&cps_stuck_sensor_timer, conn);
   last_data_ms = k_uptime_get();
@@ -615,7 +614,7 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   central_conn = NULL;
   LOG_INF("on_disconnected, reason: %d", reason);
   ant_channel_close(bpwr_channel_config.channel_number);
-  ant_channel_close(bpwr_diag_channel_config.channel_number);
+  ant_channel_close(bpwr_environ_channel_config.channel_number);
   k_timer_stop(&cps_stuck_sensor_timer);
   k_timer_user_data_set(&cps_stuck_sensor_timer, NULL);
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {

@@ -12,6 +12,7 @@
 LOG_MODULE_REGISTER(ant_profiles, LOG_LEVEL_INF);
 
 struct ant_bike_power_s bike_power;
+struct ant_environ_s environ;
 
 ant_channel_config_t bpwr_channel_config = {
     .channel_number = 0,
@@ -26,17 +27,17 @@ ant_channel_config_t bpwr_channel_config = {
     .network_number = ANT_NETWORK_ANTPLUS,
 };
 
-ant_channel_config_t bpwr_diag_channel_config = {
+ant_channel_config_t bpwr_environ_channel_config = {
     .channel_number = 1,
     .channel_type = 0x10,
     .ext_assign = 0,
-    .rf_freq = CONFIG_BPWR_TX_DIAG_FREQUENCY,
+    .rf_freq = 57,
     .transmission_type = 5,
-    .device_type = 11,
+    .device_type = 25,
     .device_number =
         CONFIG_BPWR_TX_FALLBACK_DEVICE_NUMBER, // to be filled by hardware id
-    .channel_period = 8182,
-    .network_number = ANT_NETWORK_BPWR_DIAG,
+    .channel_period = 8192,
+    .network_number = ANT_NETWORK_ANTPLUS,
 };
 
 ant_channel_config_t antplus_wakeup_slave_config[2] = {
@@ -123,7 +124,7 @@ int ant_profiles_set_device_number(uint32_t device_number, bool persist) {
   }
 
   ant_channel_config_t *configs[] = {&bpwr_channel_config,
-                                     &bpwr_diag_channel_config};
+                                     &bpwr_environ_channel_config};
   for (size_t i = 0; i < ARRAY_SIZE(configs); i++) {
     configs[i]->transmission_type &= 0x0F;
     configs[i]->transmission_type |= device_number_high << 4;
