@@ -47,9 +47,6 @@
 
 #include "main.h"
 
-#define STACKSIZE 1024
-#define PRIORITY 7
-
 #define CONNECTION_ATTEMPT_LIMIT 3
 
 #define LOW_BATTERY_THRESHOLD 20
@@ -972,6 +969,7 @@ int main_loop(void) {
       watchdog_feed();
       advertising_start();
       scan_start();
+      no_activity_since_ms = k_uptime_get();
     }
 #endif
 
