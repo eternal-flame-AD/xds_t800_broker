@@ -10,6 +10,7 @@ Measurement Service so that regular head units can read it.
 
 - Low power consumption suitable for touring (<15 mW when USB is not enumerated).
 - Power, cadence and power balance readout
+- ANT+ Crankset Temperature (1degC precision)
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
