@@ -12,6 +12,7 @@
 - 功率计电池读数（ANT+ 上显示为“右侧踏板/电池1”，BLE 上显示为“外部电池”）
 - 使用电池供电时，板载电量计支持可配置放电曲线（ANT+ 上显示为“左侧踏板/电池2”，BLE 上显示为“内部电池”）
 - 零点补偿（校准）支持，并支持回读偏移量（已在 Garmin Edge 1050 上测试）
+- ANT+ 唤醒：最多保存两个 ANT+ 传感器，用于从低功耗状态唤醒转发器。先用 `ant_slave start` 发现传感器，再用 `ant_slave set_wakeup` 复制到唤醒槽，`poweroff`（或自动关机）后检测到该传感器即可恢复运行。
 
 ## 硬件与开发要求
 
@@ -63,7 +64,10 @@ west build --build-dir build \
 
 ## 烧录
 
-nRF52840 Dongle 通常通过 USB DFU 烧录。
+nRF52840 Dongle 通常通过 USB DFU 烧录，按下侧边的 RESET 按钮即可触发。
+对于封装或防水灌胶、无法触及 RESET 按钮的设备，`src/bootloader.c`
+注册了一个 `bootloader` shell 命令，可进入同样的 USB DFU 模式。
+该命令使用 `boards/nrf52840dongle_nrf52840.overlay` 中定义的 `selfreset` 引脚。
 
 ### 生成并烧录 DFU 升级包
 
@@ -127,6 +131,19 @@ Zephyr shell 可通过控制台 UART（Dongle 上为 USB CDC ACM）访问，绑�
 - `bt unpair <address>` — 删除指定地址的绑定，例如 `bt unpair DE:AD:BE:EF:00:00`。
 
 这有助于移除不再信任的设备，或为新设备腾出绑定槽位。
+
+### ANT+ 唤醒槽
+
+转发器在低功耗状态下仍可监听已配置的 ANT+ 传感器，因此你可以通过车上或身上的传感器唤醒它，而不必按 Dongle 按钮。
+
+相关命令由 `src/shell_ant_slave.c` 提供：
+
+- `ant_slave start <device_type> <channel_period> [<device_number>]` — 打开一个通用 ANT+ Slave 通道以寻找传感器。将 `<device_number>` 设为 `0` 可监听任意同类型传感器。
+- `ant_slave` — 显示已配置的通道以及通用 Slave 通道是否已跟踪到传感器。
+- `ant_slave set_wakeup [0|1]` — 将当前跟踪到的传感器复制到唤醒槽 `0` 或 `1`，并持久化到 Flash。省略槽位时默认使用 `0`。
+- `ant_slave clear_wakeup [0|1]` — 清空唤醒槽。省略槽位时清空两个槽。
+
+当触发自动关机或 `poweroff` shell 命令时，转发器会关闭蓝牙和 USB，并在配置的唤醒通道上监听。检测到任一配置传感器时即唤醒；监听周期约为 2 秒，因此适用于通道周期不超过约 2 秒的传感器。
 
 ### Central 配置文件系统
 

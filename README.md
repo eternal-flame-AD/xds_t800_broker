@@ -14,6 +14,7 @@ Measurement Service so that regular head units can read it.
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
+- Wake-on-ANT+: save up to two ANT+ sensors to wake the broker from the low-power state. Discover the sensor with `ant_slave start`, copy it into a wakeup slot with `ant_slave set_wakeup`, and `poweroff` (or auto power-off) will resume operation when the sensor is next detected.
 
 ## Requirements
 
@@ -79,6 +80,10 @@ ANT+ only or are comfortable with the pairing workflow.
 
 The nRF52840 Dongle is usually programmed over USB DFU,
 triggered by the side-mounted RESET button.
+For encased or waterproof potted devices that do not expose the RESET button,
+`src/bootloader.c` registers a `bootloader` shell command that enters the same
+USB DFU mode. The command uses the `selfreset` pin defined in
+`boards/nrf52840dongle_nrf52840.overlay`.
 
 ### Generate and flash a DFU package
 
@@ -154,6 +159,30 @@ are provided by `src/shell_bt.c`:
 
 This might be helpful for removing no longer trusted devices or clearing
 up bond slots for new devices.
+
+### ANT+ wake-up slots
+
+The broker can keep listening for configured ANT+ sensors while in the
+low-power state, so you can wake it from sensors on your bike or body
+instead of pressing the dongle button.
+
+The commands are provided by `src/shell_ant_slave.c`:
+
+- `ant_slave start <device_type> <channel_period> [<device_number>]` — Open a
+  generic ANT+ slave channel to find a sensor. Use `0` for `<device_number>`
+  to listen for any sensor of the requested type.
+- `ant_slave` — Show the configured channels and whether the generic slave
+  channel is tracking a sensor.
+- `ant_slave set_wakeup [0|1]` — Copy the currently tracked sensor into wakeup
+  slot `0` or `1` and persist it to flash. Omit the slot to use slot `0`.
+- `ant_slave clear_wakeup [0|1]` — Clear a wakeup slot. Omit the slot to clear
+  both.
+
+When auto power-off or the `poweroff` shell command is triggered, the broker
+turns off Bluetooth and USB and listens on the configured wakeup channels.
+It wakes again when one of those sensors is detected; the listen cycle is
+about 2 seconds long, so it works with sensors whose channel period is up
+to roughly 2 seconds.
 
 ### Central profile system
 
