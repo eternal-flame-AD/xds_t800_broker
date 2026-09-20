@@ -12,21 +12,36 @@
 - 功率计电池读数（ANT+ 上显示为“右侧踏板/电池1”，BLE 上显示为“外部电池”）
 - 使用电池供电时，板载电量计支持可配置放电曲线（ANT+ 上显示为“左侧踏板/电池2”，BLE 上显示为“内部电池”）
 - 零点补偿（校准）支持，并支持回读偏移量（已在 Garmin Edge 1050 上测试）
-- ANT+ 唤醒：最多保存两个 ANT+ 传感器，用于从低功耗状态唤醒转发器。先用 `ant_slave start` 发现传感器，再用 `ant_slave set_wakeup` 复制到唤醒槽，`poweroff`（或自动关机）后检测到该传感器即可恢复运行。
+- 默认 15 分钟没有蓝牙或 USB 活动会自动进入节电模式，按任意键唤醒
+- ANT+ 唤醒：最多保存两个随车 ANT+ 传感器，通过其他传感器广播来唤醒转发器。
 
 ## 硬件与开发要求
 
 ### 硬件方案
 
 - 简单方案：nRF52840 Dongle + 市面上常见的 3 节 AAA 转 USB 电池盒（电池直接接 VBUS，无需升压模块）。
-  使用镍氢充电电池时，每天 10 小时大约可运行约 2-3 周；
-  换成碱性 7 号 或 5 号镍氢电池可延长至约 4 周。
-  默认 15 分钟没有蓝牙或 USB 活动会自动进入节电模式，按任意键唤醒。
 - 进阶方案：nRF52840 Dongle 装入定制外壳，并焊接固定电池。需要参考 Nordic 的
   [硬件指南](https://docs.nordicsemi.com/r/bundle/ug_nrf52840_dongle/page/ug/nrf52840_dongle/hw_power_ext_reg_source.html)
   对稳压器进行修改。
 
 不推荐使用移动电源或 OTG 线：大多数移动电源在轻负载下会自动断电，且电量计无法正常工作。
+
+#### 电池续航
+
+以下数据为近似值，假设转发器在 USB 未枚举时功耗约为 15 mW。
+实际续航受电池品质、温度、自放电以及无线电唤醒频率影响。
+
+| 电池类型 | 标称能量 | 约 15 mW 下续航（每天 10 小时） |
+|---|---|---|
+| 3 节 7 号镍氢（Eneloop） | 约 2.9 Wh | 约 2.5 周 |
+| 3 节 7 号碱性 | 约 4.5 Wh | 约 4 周 |
+| 3 节 5 号镍氢 | 约 7.2 Wh | 约 6–7 周 |
+| 3 节 5 号碱性 | 约 11 Wh | 约 10 周 |
+| 1 节 18650 锂离子 | 约 9–13 Wh | 约 8–12 周 |
+
+如需自定义电池方案，可在 `local.conf` 中设置 `CONFIG_BATTERY_CELL_COUNT`
+和 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*`（如 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_10`
+等），以匹配你的串联节数和放电曲线。默认值针对 3 节镍氢电池调校。
 
 ### 开发环境
 
@@ -67,7 +82,7 @@ west build --build-dir build \
 nRF52840 Dongle 通常通过 USB DFU 烧录，按下侧边的 RESET 按钮即可触发。
 对于封装或防水灌胶、无法触及 RESET 按钮的设备，`src/bootloader.c`
 注册了一个 `bootloader` shell 命令，可进入同样的 USB DFU 模式。
-该命令使用 `boards/nrf52840dongle_nrf52840.overlay` 中定义的 `selfreset` 引脚。
+该命令需要 `boards/nrf52840dongle_nrf52840.overlay` 中定义的 `selfreset` 引脚，对其他设备不可用。
 
 ### 生成并烧录 DFU 升级包
 
@@ -108,11 +123,7 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 由于 shell 包含 `devmem` 等敏感命令，手机必须先与转发器建立 LESC 绑定，才能使用 NUS shell。
 
-第一次绑定需要通过 USB/UART shell 获取并显示 6 位配对码，然后在手机 App 中输入确认。
-
-如果进行路边现场测试，请选择安全地点，并始终注意周围环境！
-
-#### 使用 nRF Toolbox 或 nRF Connect 配对
+第一次绑定需要通过 USB/UART shell 获取并显示 6 位配对码，然后在手机 App 中输入确认：
 
 1. 在手机上打开 **nRF Toolbox** 或 **nRF Connect**。
 2. 扫描并连接名为 `XDS_T800_Broker` 的设备（或者你通过 `CONFIG_BT_DEVICE_NAME` 自定义的名称）。
@@ -121,6 +132,8 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 5. 绑定完成后，Nordic UART Service 解锁。你可以在 nRF Toolbox 中打开 **UART** 模块发送命令，转发器也会将日志回传到手机。
 
 绑定信息保存在 Flash 中，并通过 `settings_load()` 在启动时恢复，因此手机只需配对一次。
+
+如果进行路边现场测试，请选择安全地点，并始终注意周围环境！
 
 ### 绑定管理
 
@@ -134,16 +147,20 @@ Zephyr shell 可通过控制台 UART（Dongle 上为 USB CDC ACM）访问，绑�
 
 ### ANT+ 唤醒槽
 
-转发器在低功耗状态下仍可监听已配置的 ANT+ 传感器，因此你可以通过车上或身上的传感器唤醒它，而不必按 Dongle 按钮。
+转发器在低功耗状态下仍可监听已配置的 ANT+ 传感器，因此你可以通过随车的其他传感器来自动唤醒它，而不必按 Dongle 按钮。注意本功能会大幅增加待机耗电量。
 
 相关命令由 `src/shell_ant_slave.c` 提供：
 
 - `ant_slave start <device_type> <channel_period> [<device_number>]` — 打开一个通用 ANT+ Slave 通道以寻找传感器。将 `<device_number>` 设为 `0` 可监听任意同类型传感器。
+
+  常用参数：
+    - 心率： 120 8070
+    - 速度： 123 8118
 - `ant_slave` — 显示已配置的通道以及通用 Slave 通道是否已跟踪到传感器。
 - `ant_slave set_wakeup [0|1]` — 将当前跟踪到的传感器复制到唤醒槽 `0` 或 `1`，并持久化到 Flash。省略槽位时默认使用 `0`。
 - `ant_slave clear_wakeup [0|1]` — 清空唤醒槽。省略槽位时清空两个槽。
 
-当触发自动关机或 `poweroff` shell 命令时，转发器会关闭蓝牙和 USB，并在配置的唤醒通道上监听。检测到任一配置传感器时即唤醒；监听周期约为 2 秒，因此适用于通道周期不超过约 2 秒的传感器。
+当触发自动关机或 `poweroff` shell 命令时，转发器会关闭蓝牙和 USB以节电，并在配置的唤醒通道上监听。检测到任一配置传感器时即唤醒。
 
 ### Central 配置文件系统
 

@@ -14,7 +14,8 @@ Measurement Service so that regular head units can read it.
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
-- Wake-on-ANT+: save up to two ANT+ sensors to wake the broker from the low-power state. Discover the sensor with `ant_slave start`, copy it into a wakeup slot with `ant_slave set_wakeup`, and `poweroff` (or auto power-off) will resume operation when the sensor is next detected.
+- By default the dongle will auto power-off after 15 minutes of no BLE or USB activity. Press any button to the wake the dongle up
+- Wake-on-ANT+: save up to two ANT+ sensors to wake the broker from the low-power state
 
 ## Requirements
 
@@ -22,15 +23,30 @@ Measurement Service so that regular head units can read it.
 
 - Minimal: nRF52840 Dongle with an off-the-shelf unregulated
   3×AAA-to-USB adapter (battery wired directly to VBUS).
-  Allows for ~2.5 weeks of operation (10 h/day) on Ni-MH rechargeables.
-  You can also use alkaline AAA or AA Ni-MH batteries to bump this number to ~4 weeks.
-  By default the dongle will auto power-off after 15 minutes of no BLE or USB activity.
-  Press any button to the wake the dongle up.
+  
 - Robust: nRF52840 Dongle in a custom enclosure
   with a hardwired battery. Requires the regulator modification described in the
   [hardware guide](https://docs.nordicsemi.com/r/bundle/ug_nrf52840_dongle/page/ug/nrf52840_dongle/hw_power_ext_reg_source.html).
 
 Power banks or OTG cables are not recommended: most will shut off under light load, and the battery gauge will not work.
+
+#### Battery endurance
+
+The figures below are approximate and assume the broker consumes about 15 mW
+with USB unenumerated. Actual runtime depends on cell quality, temperature,
+self-discharge, and how often the radio wakes.
+
+| Battery | Nominal energy | ~Endurance (10 h/day) |
+|---|---|---|
+| 3×AAA Ni-MH (Eneloop) | ~2.9 Wh | ~2.5 weeks |
+| 3×AAA alkaline | ~4.5 Wh | ~4 weeks |
+| 3×AA Ni-MH | ~7.2 Wh | ~6–7 weeks |
+| 3×AA alkaline | ~11 Wh | ~10 weeks |
+| 1×18650 Li-ion | ~9–13 Wh | ~8–12 weeks |
+
+For bespoke battery rigs, set `CONFIG_BATTERY_CELL_COUNT` and the
+`CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*` options in `local.conf` to match your
+cell count and discharge curve. The defaults are tuned for three Ni-MH cells.
 
 ### Development
 
@@ -80,10 +96,9 @@ ANT+ only or are comfortable with the pairing workflow.
 
 The nRF52840 Dongle is usually programmed over USB DFU,
 triggered by the side-mounted RESET button.
+
 For encased or waterproof potted devices that do not expose the RESET button,
-`src/bootloader.c` registers a `bootloader` shell command that enters the same
-USB DFU mode. The command uses the `selfreset` pin defined in
-`boards/nrf52840dongle_nrf52840.overlay`.
+`src/bootloader.c` registers a `bootloader` shell command that enters the same USB DFU mode. The `selfreset` pin required for this feature is predefined for `boards/nrf52840dongle_nrf52840.overlay`.
 
 ### Generate and flash a DFU package
 
@@ -163,14 +178,18 @@ up bond slots for new devices.
 ### ANT+ wake-up slots
 
 The broker can keep listening for configured ANT+ sensors while in the
-low-power state, so you can wake it from sensors on your bike or body
-instead of pressing the dongle button.
+low-power state, so you can wake the broker up using other sensors on your bike instead of pressing the dongle button.
+Note that this feature will drastically increase standby power consumption.
 
 The commands are provided by `src/shell_ant_slave.c`:
 
 - `ant_slave start <device_type> <channel_period> [<device_number>]` — Open a
   generic ANT+ slave channel to find a sensor. Use `0` for `<device_number>`
   to listen for any sensor of the requested type.
+  
+  Common parameters:
+    - Heart rate: 120 8070
+    - Bike speed: 123 8118
 - `ant_slave` — Show the configured channels and whether the generic slave
   channel is tracking a sensor.
 - `ant_slave set_wakeup [0|1]` — Copy the currently tracked sensor into wakeup
@@ -179,10 +198,7 @@ The commands are provided by `src/shell_ant_slave.c`:
   both.
 
 When auto power-off or the `poweroff` shell command is triggered, the broker
-turns off Bluetooth and USB and listens on the configured wakeup channels.
-It wakes again when one of those sensors is detected; the listen cycle is
-about 2 seconds long, so it works with sensors whose channel period is up
-to roughly 2 seconds.
+turns off Bluetooth and USB to conserve power and listens on the configured wakeup channels.
 
 ### Central profile system
 
