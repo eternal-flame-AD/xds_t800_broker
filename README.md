@@ -32,17 +32,15 @@ Power banks or OTG cables are not recommended: most will shut off under light lo
 
 #### Battery endurance
 
-The figures below are approximate and assume the broker consumes about 15 mW
-with USB unenumerated. Actual runtime depends on cell quality, temperature,
-self-discharge, and how often the radio wakes.
+The figures below are approximate and assume the broker is always connected to power and consumes about 15 mW when active. Actual runtime depends on cell and board component quality, temperature and self-discharge. Wake-on-ANT+ will lead to ~8mW consumption even during sleep.
 
-| Battery | Nominal energy | ~Endurance (10 h/day) |
+| Battery | Nominal energy | ~Endurance (10 h/day active) |
 |---|---|---|
 | 3×AAA Ni-MH (Eneloop) | ~2.9 Wh | ~2.5 weeks |
-| 3×AAA alkaline | ~4.5 Wh | ~4 weeks |
-| 3×AA Ni-MH | ~7.2 Wh | ~6–7 weeks |
-| 3×AA alkaline | ~11 Wh | ~10 weeks |
-| 1×18650 Li-ion | ~9–13 Wh | ~8–12 weeks |
+| 3×AAA alkaline | ~4.5 Wh | ~3.5 weeks |
+| 3×AA Ni-MH | ~7.2 Wh | ~6 weeks |
+| 3×AA alkaline | ~11 Wh | ~9 weeks |
+| 1×18650 Li-ion | ~9–13 Wh | ~7–11 weeks |
 
 For bespoke battery rigs, set `CONFIG_BATTERY_CELL_COUNT` and the
 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*` options in `local.conf` to match your

@@ -5,8 +5,6 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/led.h>
 
-#define RECOVERY_MARKER 0xA5
-
 #if DT_NODE_EXISTS(DT_NODELABEL(selfreset)) &&                                 \
     DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(selfreset))
 
