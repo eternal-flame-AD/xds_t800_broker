@@ -1,5 +1,6 @@
 #include "poweroff.h"
 #include "ant_profiles.h"
+#include "cac_acm_serial.h"
 #include "leds.h"
 #include "watchdog.h"
 #include "zephyr/settings/settings.h"
@@ -54,6 +55,10 @@ void enter_poweroff(void) {
       bt_le_adv_stop();
       bt_le_scan_stop();
       bt_disable();
+      err = usb_set_enabled(false);
+      if (err != 0) {
+        LOG_ERR("Failed to disable USB (%d)", err);
+      }
 
       poweroff_wakeup_requested = true;
       led_clear_bit(POWER_LED_BIT);
@@ -84,6 +89,10 @@ void enter_poweroff(void) {
   } while (0);
 
   if (wakeup_success) {
+    usb_set_enabled(true);
+    if (err != 0) {
+      LOG_ERR("Failed to re-enable USB (%d)", err);
+    }
     err = bt_enable(NULL);
     if (err != 0) {
       LOG_ERR("Failed to enable Bluetooth (err %d)", err);

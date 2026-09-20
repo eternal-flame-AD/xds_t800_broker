@@ -19,9 +19,15 @@
 
 static bool usb_enabled = false;
 
+static bool usb_connected = false;
+
+bool is_usb_connected(void) { return usb_enabled && usb_connected; }
+
 bool is_usb_enabled(void) { return usb_enabled; }
 
 #if DT_NODE_EXISTS(DT_COMPAT_GET_ANY_STATUS_OKAY(zephyr_cdc_acm_uart))
+
+static bool vbus_present = false;
 
 LOG_MODULE_REGISTER(cdc_acm_serial, LOG_LEVEL_INF);
 
@@ -45,6 +51,22 @@ USBD_CONFIGURATION_DEFINE(cdc_acm_serial_fs_config, attributes, 50,
 
 USBD_CONFIGURATION_DEFINE(cdc_acm_serial_hs_config, attributes, 50,
                           &hs_cfg_desc);
+
+int usb_set_enabled(bool enabled) {
+  if (enabled && !vbus_present) {
+    LOG_ERR("VBUS not present, cannot enable USB");
+    return -EIO;
+  }
+  int err =
+      enabled ? usbd_enable(&cdc_acm_serial) : usbd_disable(&cdc_acm_serial);
+  if (err && err != -EALREADY) {
+    LOG_ERR("Failed to %s %s (%d)", enabled ? "enable" : "disable",
+            "device support", err);
+    return err;
+  }
+  usb_enabled = enabled;
+  return 0;
+}
 
 static int register_cdc_acm_0(struct usbd_context *const uds_ctx,
                               const enum usbd_speed speed) {
@@ -78,18 +100,33 @@ static void usb_msg_cb(struct usbd_context *const ctx,
   int err;
   switch (msg->type) {
   case USBD_MSG_VBUS_READY:
-    err = usbd_enable(&cdc_acm_serial);
-    if (err && err != -EALREADY) {
+    vbus_present = true;
+    err = usb_set_enabled(true);
+    if (err) {
       LOG_ERR("Failed to enable %s (%d)", "device support", err);
     }
-    usb_enabled = true;
     break;
   case USBD_MSG_VBUS_REMOVED:
-    err = usbd_disable(&cdc_acm_serial);
-    if (err && err != -EALREADY) {
+    vbus_present = false;
+    err = usb_set_enabled(false);
+    if (err) {
       LOG_ERR("Failed to disable %s (%d)", "device support", err);
     }
-    usb_enabled = false;
+    break;
+  case USBD_MSG_RESET:
+    usb_connected = false;
+    LOG_INF("Reset detected");
+    break;
+  case USBD_MSG_CONFIGURATION:
+    LOG_INF("Configuration changed");
+    break;
+  case USBD_MSG_SUSPEND:
+    LOG_INF("Device suspended");
+    usb_connected = false;
+    break;
+  case USBD_MSG_RESUME:
+    LOG_INF("Device resumed");
+    usb_connected = true;
     break;
   default:
     break;
@@ -146,13 +183,13 @@ static int cdc_acm_serial_init_device_impl(void) {
   }
 
   if (!usbd_can_detect_vbus(&cdc_acm_serial)) {
+    vbus_present = true;
     LOG_WRN("USBD does not support VBUS detection, USB will remain enabled.");
-    err = usbd_enable(&cdc_acm_serial);
+    err = usb_set_enabled(true);
     if (err) {
       LOG_ERR("Failed to enable %s (%d)", "device support", err);
       return err;
     }
-    usb_enabled = true;
   }
 
   return 0;
@@ -171,4 +208,7 @@ int cdc_acm_serial_init_device(void) {
 
 SYS_INIT(cdc_acm_serial_init_device, APPLICATION,
          CONFIG_APPLICATION_INIT_PRIORITY);
+
+#else
+int usb_set_enabled(bool enabled) { return -ENOTSUP; }
 #endif // DT_NODE_EXISTS(DT_COMPAT_GET_ANY_STATUS_OKAY(zephyr_cdc_acm_uart))

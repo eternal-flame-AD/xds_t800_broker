@@ -953,7 +953,7 @@ int main_loop(void) {
       ((i % 2) ? led_set_bit : led_clear_bit)(POWER_LED_BIT);
     }
 
-    uint32_t is_active = is_usb_enabled();
+    uint32_t is_active = is_usb_connected();
     bt_conn_foreach(BT_CONN_TYPE_LE, bt_conn_foreach_count_connected_peripheral,
                     &is_active);
     if (is_active) {
