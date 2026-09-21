@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
+include(CheckCSourceCompiles)
 
 # Manual ANT SDK install: unzip sdk-ant to <NCS>/ant.
 # Force-export as cache so sysbuild/child configure also sees it.
@@ -29,6 +30,29 @@ endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(xds_t800_broker)
+
+set_property(TARGET app PROPERTY C_STANDARD 11)
+
+check_c_source_compiles("
+    int main(void) {
+      __auto_type x = 0;
+      return 0;
+    }
+" HAVE_AUTO_TYPE)
+check_c_source_compiles("
+    int main(void) {
+      int x = 0;
+      typeof(x) y = 0;
+      return y;
+    }
+" HAVE_TYPEOF)
+
+if(HAVE_AUTO_TYPE)
+  target_compile_definitions(app PRIVATE HAVE_AUTO_TYPE)
+endif()
+if(HAVE_TYPEOF)
+  target_compile_definitions(app PRIVATE HAVE_TYPEOF)
+endif()
 
 # NORDIC SDK APP START
 target_sources(app PRIVATE

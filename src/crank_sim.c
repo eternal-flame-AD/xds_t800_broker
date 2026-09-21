@@ -4,13 +4,32 @@
 #define ONE_ROTATION (4096)
 #define ONE_MINUTE_IN_TICKS (CONFIG_SYS_CLOCK_TICKS_PER_SEC * 60)
 
-#define ROUND_DIV(x, y) (((x) + (y) / 2) / (y))
-
 BUILD_ASSERT(ONE_MINUTE_IN_TICKS % ONE_ROTATION == 0,
              "one_minute_in_ticks must be divisible by one_rotation");
 BUILD_ASSERT(CONFIG_SYS_CLOCK_TICKS_PER_SEC > 0 &&
                  CONFIG_SYS_CLOCK_TICKS_PER_SEC % 1024 == 0,
              "SYS_CLOCK_TICKS_PER_SEC must be divisible by 1024");
+
+#ifdef HAVE_TYPEOF
+#define ROUND_DIV(x, y)                                                        \
+  ({                                                                           \
+    typeof(y) _y = (y);                                                        \
+    ((x) + (_y / 2)) / _y;                                                     \
+  })
+
+#else
+
+#ifdef HAVE_AUTO_TYPE
+#define ROUND_DIV(x, y)                                                        \
+  ({                                                                           \
+    __auto_type _y = (y);                                                      \
+    ((x) + (_y / 2)) / _y;                                                     \
+  })
+#else
+#define ROUND_DIV(x, y) (((x) + (y) / 2) / (y))
+#endif /* HAVE_AUTO_TYPE */
+
+#endif /* HAVE_TYPEOF */
 
 bool crank_sim_update(struct crank_sim_s *crank_sim, uint16_t rpm,
                       uint32_t current_ticks) {
