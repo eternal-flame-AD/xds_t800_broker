@@ -42,7 +42,7 @@ check_c_source_compiles("
 check_c_source_compiles("
     int main(void) {
       int x = 0;
-      typeof(x) y = 0;
+      __typeof__(x) y = 0;
       return y;
     }
 " HAVE_TYPEOF)

@@ -13,7 +13,7 @@ BUILD_ASSERT(CONFIG_SYS_CLOCK_TICKS_PER_SEC > 0 &&
 #ifdef HAVE_TYPEOF
 #define ROUND_DIV(x, y)                                                        \
   ({                                                                           \
-    typeof(y) _y = (y);                                                        \
+    __typeof__(y) _y = (y);                                                    \
     ((x) + (_y / 2)) / _y;                                                     \
   })
 
