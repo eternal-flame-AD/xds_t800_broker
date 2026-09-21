@@ -39,8 +39,8 @@ static void bt_conn_foreach_count_central(struct bt_conn *conn, void *data) {
 
 static void adv_work_handler(struct k_work *work) {
   int err = bt_le_adv_start(
-      BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, BT_GAP_MS_TO_ADV_INTERVAL(400),
-                      BT_GAP_MS_TO_ADV_INTERVAL(600), NULL),
+      BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, BT_GAP_MS_TO_ADV_INTERVAL(800),
+                      BT_GAP_MS_TO_ADV_INTERVAL(1200), NULL),
       ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 
   if (err && err != -EALREADY) {

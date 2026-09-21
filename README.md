@@ -8,7 +8,7 @@ Measurement Service so that regular head units can read it.
 
 ## Features
 
-- Low power consumption suitable for touring (<15 mW when USB is not enumerated).
+- Low power consumption suitable for touring (<15 mW when USB is not enumerated and LED at 100%).
 - Power, cadence and power balance readout
 - ANT+ Crankset Temperature (1degC precision)
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
