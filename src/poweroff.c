@@ -42,13 +42,9 @@ void enter_poweroff(void) {
                 antplus_wakeup_slave_config[i].channel_number);
         continue;
       }
-      err = ant_channel_open(antplus_wakeup_slave_config[i].channel_number);
-      if (err != 0) {
-        LOG_ERR("Failed to open ANT+ Slave (%d)", err);
-        continue;
-      }
       num_wakeup_channels++;
     }
+    k_sem_reset(&poweroff_wakeup_sem);
 
     if (num_wakeup_channels > 0) {
       LOG_INF("Wakeup ANT+ Slave triggered");
@@ -62,19 +58,32 @@ void enter_poweroff(void) {
 
       poweroff_wakeup_requested = true;
       led_clear_bit(POWER_LED_BIT);
+      uint8_t cycle = 0;
       while (1) {
         watchdog_feed();
-        for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
-          uint8_t status = 0;
-          ant_channel_status_get(antplus_wakeup_slave_config[i].channel_number,
-                                 &status);
-          if ((status & STATUS_CHANNEL_STATE_MASK) == STATUS_ASSIGNED_CHANNEL) {
-            ant_channel_open(antplus_wakeup_slave_config[i].channel_number);
-            if (err != 0) {
-              LOG_ERR("Failed to open ANT+ Slave (%d)", err);
+
+        switch (cycle++ % 8) {
+        case 0:
+          for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
+            uint8_t status = 0;
+            ant_channel_status_get(
+                antplus_wakeup_slave_config[i].channel_number, &status);
+            if ((status & STATUS_CHANNEL_STATE_MASK) ==
+                STATUS_ASSIGNED_CHANNEL) {
+              ant_channel_open(antplus_wakeup_slave_config[i].channel_number);
+              if (err != 0) {
+                LOG_ERR("Failed to open ANT+ Slave (%d)", err);
+              }
             }
           }
+          break;
+        case 2:
+          for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
+            ant_channel_close(antplus_wakeup_slave_config[i].channel_number);
+          }
+          break;
         }
+
         if (k_sem_take(&poweroff_wakeup_sem, K_MSEC(1900)) == 0) {
           break;
         }

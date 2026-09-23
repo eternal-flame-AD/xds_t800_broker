@@ -930,8 +930,6 @@ int main_loop(void) {
 
   gatt_sys_info_init();
 
-  led_set_bit(POWER_LED_BIT);
-
   int64_t no_activity_since_ms = k_uptime_get();
 
   for (int i = 0;; i++) {
@@ -973,7 +971,16 @@ int main_loop(void) {
     }
 #endif
 
-    k_sleep(K_MSEC(500));
+    k_sleep(K_MSEC(800));
+
+    if (low_batt)
+      led_set_bit(POWER_LED_BIT);
+    k_sleep(K_MSEC(50));
+
+    led_set_bit(POWER_LED_BIT);
+    k_sleep(K_MSEC(150));
+
+    led_clear_bit(POWER_LED_BIT);
   }
 
   LOG_WRN("Main loop exited");
