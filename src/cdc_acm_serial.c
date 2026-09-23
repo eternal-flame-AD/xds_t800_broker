@@ -97,11 +97,17 @@ static int register_cdc_acm_0(struct usbd_context *const uds_ctx,
 
 static void usb_msg_cb(struct usbd_context *const ctx,
                        const struct usbd_msg *const msg) {
-  int err;
+  int err = 0;
   switch (msg->type) {
   case USBD_MSG_VBUS_READY:
     vbus_present = true;
-    err = usb_set_enabled(true);
+    static bool enable_once = true;
+    if (enable_once) {
+      err = usb_set_enabled(true);
+      if (err == 0) {
+        enable_once = false;
+      }
+    }
     if (err) {
       LOG_ERR("Failed to enable %s (%d)", "device support", err);
     }
