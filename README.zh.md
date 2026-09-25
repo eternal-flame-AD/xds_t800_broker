@@ -6,47 +6,47 @@
 
 ## 功能特性
 
-- 低功耗，适合长途骑行（USB 未枚举，LED 亮度 100% 时 <15 mW）
-- 功率踏频与左右平衡读数
-- ANT+ 传感器温度 (Tempe, 1 degC 精度)
-- 功率计电池读数（ANT+ 上显示为“右侧踏板/电池1”，BLE 上显示为“外部电池”）
-- 使用电池供电时，板载电量计支持可配置放电曲线（ANT+ 上显示为“左侧踏板/电池2”，BLE 上显示为“内部电池”）
+- 低功耗，适合长途骑行（USB 未枚举且 LED 亮度 100% 时 <15 mW，断开连接时约 5 mW）。
+- 功率、踏频与左右平衡读数
+- ANT+ 曲柄温度（1°C 精度）
+- 功率计电池读数（ANT+ 上显示为“右侧/电池 1”，BLE 上显示为“外部电池”）
+- 使用电池供电时，板载电量计支持可配置放电曲线（ANT+ 上显示为“左侧/电池 2”，BLE 上显示为“内部电池”）
 - 零点补偿（校准）支持，并支持回读偏移量（已在 Garmin Edge 1050 上测试）
-- 默认 15 分钟没有蓝牙或 USB 活动会自动进入节电模式，按任意键唤醒
-- ANT+ 唤醒：最多保存两个随车 ANT+ 传感器，通过其他传感器广播来唤醒转发器
+- 可选自动关机功能。按任意键唤醒转发器。
 
-## 硬件与开发要求
+## 要求
 
 ### 硬件方案
 
-- 简单方案：nRF52840 Dongle + 市面上常见的 3 节 AAA 转 USB 电池盒（电池直接接 VBUS，无需升压模块）。
-- 进阶方案：nRF52840 Dongle 装入定制外壳，并焊接固定电池。需要参考 Nordic 的
+- 最小方案：nRF52840 Dongle + 市面上常见的非稳压 3 节 AAA 转 USB 电池盒（电池直接接 VBUS）。
+
+- 最便宜方案：Nice!Nano 或 “Pro Micro nrf52840” 克隆板。
+  注意：由于 Adafruit UF2 引导程序的特性，刷入新固件后需要重新插拔 USB，串口才能正常工作。
+
+- 坚固方案：nRF52840 Dongle 装入定制外壳，并焊接固定电池。需要参考 Nordic 的
   [硬件指南](https://docs.nordicsemi.com/r/bundle/ug_nrf52840_dongle/page/ug/nrf52840_dongle/hw_power_ext_reg_source.html)
   对稳压器进行修改。
 
 不推荐使用移动电源或 OTG 线：大多数移动电源在轻负载下会自动断电，且电量计无法正常工作。
 
-#### 电池续航
+## 功耗
 
-以下数据为近似值，假设转发器 24 小时上电且工作时功耗约为 15 mW。实际续航受电池和器件品质、温度、自放电等影响。使用 ANT+ 唤醒时，即使睡眠状态也需要大约 8 mW。
+| 状态 | 功耗 | |
+| --- | --- | ---|
+| 已连接 | 约 4 mW | ![连接时功耗](assets/power_connected.png) |
+| 低功耗搜索 | 约 5 mW | ![断开时功耗](assets/power_disconnected.png) |
 
-| 电池类型 | 标称能量 | 约 15 mW 下续航（每天 10 小时工作时间） |
-|---|---|---|
-| 3 节 7 号镍氢（Eneloop） | 约 2.9 Wh | 约 2.5 周 |
-| 3 节 7 号碱性 | 约 4.5 Wh | 约 3.5 周 |
-| 3 节 5 号镍氢 | 约 7.2 Wh | 约 6 周 |
-| 3 节 5 号碱性 | 约 11 Wh | 约 9 周 |
-| 1 节 18650 锂离子 | 约 9–13 Wh | 约 7–11 周 |
+### 自定义电池电量计
 
 如需自定义电池方案，可在 `local.conf` 中设置 `CONFIG_BATTERY_CELL_COUNT`
-和 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*`（如 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_10`
+和 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*` 选项（如 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_10`
 等），以匹配你的串联节数和放电曲线。默认值针对 3 节镍氢电池调校。
 
 ### 开发环境
 
 - nRF Connect SDK (NCS) v3.2.4
 - 已克隆到 NCS 目录下的 ANT SDK 模块（`<NCS>/ant`）。该模块版本必须与 NCS 版本匹配，否则可能出现无线电静默！
-- nRF52840 Dongle 或任何具备必要外设的兼容 nRF52 开发板 （比如 nrf52840 DK）
+- nRF52840 Dongle 或任何具备必要外设的兼容 nRF52 开发板（比如 52840 DK）
 
 ## 配置层级
 
@@ -96,13 +96,17 @@ nrfutil pkg generate \
 nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 ```
 
-这里的 `--application-version 1` 只是示例。如果你之后要再次升级，通常需要递增版本号，否则引导程序可能会跳过本次升级。
-
 ## 指示灯含义
+
+带 RGB LED 的板子：
 
 - 红色：转发器已连接到 T-800 传感器
 - 绿色：当前未使用，预留用于第二个自定义 central 配置文件
 - 蓝色：每收到一个有效的功率数据包时闪烁一次
+
+仅带一个 LED 的板子：
+
+- 红色：已上电，每收到一个有效的功率数据包时闪烁一次
 
 ## 配对模式
 
@@ -114,7 +118,7 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 注意：需先连接传感器，然后配对码表。传感器未连接时 ANT+ 不会激活。
 
-## 高级用法
+## 高级用法与开发
 
 ### 蓝牙 UART Shell
 
@@ -143,23 +147,6 @@ Zephyr shell 可通过控制台 UART（Dongle 上为 USB CDC ACM）访问，绑�
 - `bt unpair <address>` — 删除指定地址的绑定，例如 `bt unpair DE:AD:BE:EF:00:00`。
 
 这有助于移除不再信任的设备，或为新设备腾出绑定槽位。
-
-### ANT+ 唤醒槽
-
-转发器在低功耗状态下仍可监听已配置的 ANT+ 传感器，因此你可以通过随车的其他传感器来自动唤醒它，而不必按 Dongle 按钮。注意本功能会大幅增加待机耗电量。
-
-相关命令由 `src/shell_ant_slave.c` 提供：
-
-- `ant_slave start <device_type> <channel_period> [<device_number>]` — 打开一个通用 ANT+ Slave 通道以寻找传感器。将 `<device_number>` 设为 `0` 可监听任意同类型传感器。
-
-  常用参数：
-    - 心率： 120 8070
-    - 速度： 123 8118
-- `ant_slave` — 显示已配置的通道以及通用 Slave 通道是否已跟踪到传感器。
-- `ant_slave set_wakeup [0|1]` — 将当前跟踪到的传感器复制到唤醒槽 `0` 或 `1`，并持久化到 Flash。省略槽位时默认使用 `0`。
-- `ant_slave clear_wakeup [0|1]` — 清空唤醒槽。省略槽位时清空两个槽。
-
-当触发自动关机或 `poweroff` shell 命令时，转发器会关闭蓝牙和 USB以节电，并在配置的唤醒通道上监听。检测到任一配置传感器时即唤醒。
 
 ### Central 配置文件系统
 
