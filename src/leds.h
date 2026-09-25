@@ -13,3 +13,5 @@ void led_data_activity(void);
 
 void led_set_bit(uint8_t bit);
 void led_clear_bit(uint8_t bit);
+
+void led_set_temp_dim(bool dim);

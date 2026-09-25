@@ -20,6 +20,8 @@ const uint8_t brightness_options[] = {100, 75, 50, 4};
 
 static uint8_t brightness_index = 0;
 
+static bool temp_dim = false;
+
 static _Atomic uint8_t led_state = 0;
 
 struct dimmable_led {
@@ -48,40 +50,45 @@ static void dimmable_led_set(const struct dimmable_led *led, uint8_t brightness,
   }
 }
 
-const struct dimmable_led central1_led_dev = DIMMABLE_LED(
+const struct dimmable_led central1_led_dev =
 #if DT_HAS_ALIAS(central1_status_led)
-    DT_ALIAS(central1_status_led)
+    DIMMABLE_LED(DT_ALIAS(central1_status_led))
 #else
-    DT_NODELABEL(led0)
+    {0}
 #endif
-);
-const struct dimmable_led central2_led_dev = DIMMABLE_LED(
+    ;
+
+const struct dimmable_led central2_led_dev =
 #if DT_HAS_ALIAS(central2_status_led)
-    DT_ALIAS(central2_status_led)
+    DIMMABLE_LED(DT_ALIAS(central2_status_led))
 #else
-    DT_NODELABEL(led1)
+    {0}
 #endif
-);
+    ;
 
-const struct dimmable_led data_activity_led_dev = DIMMABLE_LED(
+const struct dimmable_led data_activity_led_dev =
 #if DT_HAS_ALIAS(data_activity_led)
-    DT_ALIAS(data_activity_led)
+    DIMMABLE_LED(DT_ALIAS(data_activity_led))
 #else
-    DT_NODELABEL(led2)
+    {0}
 #endif
-);
+    ;
 
-static const struct dimmable_led power_led = DIMMABLE_LED(
+static const struct dimmable_led power_led =
 #if DT_HAS_ALIAS(power_led)
-    DT_ALIAS(power_led)
+    DIMMABLE_LED(DT_ALIAS(power_led))
 #else
-    DT_NODELABEL(led3)
+    {0}
 #endif
-);
+    ;
 
 static void refresh_leds(void) {
   uint8_t brightness = brightness_options[brightness_index];
+  if (temp_dim) {
+    brightness = MIN(brightness, 4);
+  }
   uint8_t val = atomic_load(&led_state);
+
   dimmable_led_set(&power_led, brightness, (val & (1 << POWER_LED_BIT)));
   dimmable_led_set(&central1_led_dev, brightness,
                    (val & (1 << CENTRAL1_CON_STATUS_LED_BIT)));
@@ -91,6 +98,11 @@ static void refresh_leds(void) {
   dimmable_led_set(
       &data_activity_led_dev, brightness,
       (((val & (1 << DATA_ACTIVITY_LED_BIT)) != 0) ^ !power_led.valid));
+}
+
+void led_set_temp_dim(bool dim) {
+  temp_dim = dim;
+  refresh_leds();
 }
 
 static void data_activity_led_off_handler(struct k_work *work) {

@@ -8,14 +8,13 @@ Measurement Service so that regular head units can read it.
 
 ## Features
 
-- Low power consumption suitable for touring (<15 mW when USB is not enumerated and LED at 100%).
+- Low power consumption suitable for touring (<15 mW when USB is not enumerated and LED at 100%, ~5mW when disconnected).
 - Power, cadence and power balance readout
 - ANT+ Crankset Temperature (1degC precision)
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
-- By default the dongle will auto power-off after 15 minutes of no BLE or USB activity. Press any button to the wake the dongle up
-- Wake-on-ANT+: save up to two ANT+ sensors to wake the broker from the low-power state
+- Optional auto power-off feature. Press any button to the wake the dongle up.
 
 ## Requirements
 
@@ -23,6 +22,9 @@ Measurement Service so that regular head units can read it.
 
 - Minimal: nRF52840 Dongle with an off-the-shelf unregulated
   3×AAA-to-USB adapter (battery wired directly to VBUS).
+
+- Cheapest: Nice!Nano or "Pro Micro nrf52840" clone.
+  Quirk due to the Adafruit UF2 bootloader: After flashing new firmware, USB needs to be reconnected for serial to work.
   
 - Robust: nRF52840 Dongle in a custom enclosure
   with a hardwired battery. Requires the regulator modification described in the
@@ -30,17 +32,14 @@ Measurement Service so that regular head units can read it.
 
 Power banks or OTG cables are not recommended: most will shut off under light load, and the battery gauge will not work.
 
-#### Battery endurance
+## Power consumption
 
-The figures below are approximate and assume the broker is always connected to power and consumes about 15 mW when active. Actual runtime depends on cell and board component quality, temperature and self-discharge. Wake-on-ANT+ will lead to ~8mW consumption even during sleep.
+| State | Consumption || 
+| --- | --- | ---|
+| Connected| ~4mW | ![Power when Connected](assets/power_connected.png) |
+| Low power search | ~5mW | ![Power when Disconnected](assets/power_disconnected.png) |
 
-| Battery | Nominal energy | ~Endurance (10 h/day active) |
-|---|---|---|
-| 3×AAA Ni-MH (Eneloop) | ~2.9 Wh | ~2.5 weeks |
-| 3×AAA alkaline | ~4.5 Wh | ~3.5 weeks |
-| 3×AA Ni-MH | ~7.2 Wh | ~6 weeks |
-| 3×AA alkaline | ~11 Wh | ~9 weeks |
-| 1×18650 Li-ion | ~9–13 Wh | ~7–11 weeks |
+### Custom battery gauge
 
 For bespoke battery rigs, set `CONFIG_BATTERY_CELL_COUNT` and the
 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*` options in `local.conf` to match your
@@ -113,9 +112,15 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 ## LED meaning
 
+On boards with RGB leds:
+
 - Red: broker connected to the T-800 sensor
 - Green: not used, reserved for a second custom central profile
 - Blue: flashes briefly for every valid power packet received
+
+On board with only one led:
+
+- Red: powered on, flashes briefly for every valid power packet received
 
 ## Pairing mode
 
@@ -172,31 +177,6 @@ are provided by `src/shell_bt.c`:
 
 This might be helpful for removing no longer trusted devices or clearing
 up bond slots for new devices.
-
-### ANT+ wake-up slots
-
-The broker can keep listening for configured ANT+ sensors while in the
-low-power state, so you can wake the broker up using other sensors on your bike instead of pressing the dongle button.
-Note that this feature will drastically increase standby power consumption.
-
-The commands are provided by `src/shell_ant_slave.c`:
-
-- `ant_slave start <device_type> <channel_period> [<device_number>]` — Open a
-  generic ANT+ slave channel to find a sensor. Use `0` for `<device_number>`
-  to listen for any sensor of the requested type.
-  
-  Common parameters:
-    - Heart rate: 120 8070
-    - Bike speed: 123 8118
-- `ant_slave` — Show the configured channels and whether the generic slave
-  channel is tracking a sensor.
-- `ant_slave set_wakeup [0|1]` — Copy the currently tracked sensor into wakeup
-  slot `0` or `1` and persist it to flash. Omit the slot to use slot `0`.
-- `ant_slave clear_wakeup [0|1]` — Clear a wakeup slot. Omit the slot to clear
-  both.
-
-When auto power-off or the `poweroff` shell command is triggered, the broker
-turns off Bluetooth and USB to conserve power and listens on the configured wakeup channels.
 
 ### Central profile system
 

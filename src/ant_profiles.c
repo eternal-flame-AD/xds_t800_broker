@@ -40,31 +40,6 @@ ant_channel_config_t bpwr_environ_channel_config = {
     .network_number = ANT_NETWORK_ANTPLUS,
 };
 
-ant_channel_config_t antplus_wakeup_slave_config[2] = {
-    {
-        .channel_number = 2,
-        .channel_type = 0,
-        .ext_assign = 0,
-        .rf_freq = 57,
-        .transmission_type = 0,
-        .device_type = 0, // to be filled
-        .device_number = 0,
-        .channel_period = 0, // to be filled
-        .network_number = ANT_NETWORK_ANTPLUS,
-    },
-    {
-        .channel_number = 3,
-        .channel_type = 0,
-        .ext_assign = 0,
-        .rf_freq = 57,
-        .transmission_type = 0,
-        .device_type = 0, // to be filled
-        .device_number = 0,
-        .channel_period = 0, // to be filled
-        .network_number = ANT_NETWORK_ANTPLUS,
-    },
-};
-
 ant_channel_config_t antplus_generic_slave_config = {
     .channel_number = 4,
     .channel_type = 0,
@@ -137,30 +112,6 @@ static int ant_settings_set(const char *name, size_t len,
                             settings_read_cb read_cb, void *cb_arg) {
   const char *next;
   int rc;
-
-  if (settings_name_steq(name, SETTINGS_ANT_WAKEUP_SEGMENT, &next) && next) {
-    unsigned long slot = strtoul(next, NULL, 10);
-    if (errno != 0 || slot >= ANT_WAKEUP_CHANNEL_SLOT_COUNT) {
-      return -ENOENT;
-    }
-    ant_channel_config_t tmp;
-    if (len != sizeof(tmp)) {
-      return -EINVAL;
-    }
-
-    rc = read_cb(cb_arg, &tmp, sizeof(tmp));
-    if (rc >= 0) {
-      tmp.channel_number = antplus_wakeup_slave_config[slot].channel_number;
-      memcpy(&antplus_wakeup_slave_config[slot], &tmp, sizeof(tmp));
-      LOG_INF("Wakeup ANT+ Slave slot %lu config set to %d %d %d", slot,
-              antplus_wakeup_slave_config[slot].device_number,
-              antplus_wakeup_slave_config[slot].device_type,
-              antplus_wakeup_slave_config[slot].channel_period);
-      return 0;
-    }
-
-    return rc;
-  }
 
   if (settings_name_steq(name, SETTINGS_ANT_DEVICE_NUMBER_SEGMENT, &next) &&
       !next) {

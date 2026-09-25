@@ -1,0 +1,31 @@
+/ {
+	aliases {
+		data-activity-led = &red_pwm_led;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		vccpoweroff: vccpoweroff-pin {
+			gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
+			label = "VCC Power Off";
+		};
+	};
+};
+
+
+&spi0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};

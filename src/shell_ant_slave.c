@@ -21,8 +21,6 @@ static int antplus_generic_slave_cmd_handler(const struct shell *sh,
   };
   struct channel_name_t channel_names[] = {
       {&antplus_generic_slave_config, "Generic Slave"},
-      {&antplus_wakeup_slave_config[0], "Wakeup Slave 0"},
-      {&antplus_wakeup_slave_config[1], "Wakeup Slave 1"},
   };
 
   for (size_t i = 0; i < ARRAY_SIZE(channel_names); i++) {
@@ -73,96 +71,6 @@ static int antplus_generic_slave_cmd_handler(const struct shell *sh,
       break;
     }
   }
-  return 0;
-}
-
-static int antplus_wakeup_slave_cmd_set_handler(const struct shell *sh,
-                                                size_t argc, char **argv,
-                                                void *data) {
-  uint8_t status;
-  uint16_t device_number;
-  uint8_t device_type;
-  uint8_t transmit_type;
-  uint8_t slot = 0;
-  if (argc > 2) {
-    shell_error(sh, "Usage: %s <slot>", argv[0]);
-    return -ENOEXEC;
-  }
-  if (argc == 2) {
-    slot = strtoul(argv[1], NULL, 10);
-    if (errno != 0 || slot >= ANT_WAKEUP_CHANNEL_SLOT_COUNT) {
-      shell_error(sh, "Invalid slot: %s", argv[1]);
-      return -EINVAL;
-    }
-  }
-  ant_channel_id_get(antplus_generic_slave_config.channel_number,
-                     &device_number, &device_type, &transmit_type);
-  if (ant_channel_status_get(antplus_generic_slave_config.channel_number,
-                             &status) != 0) {
-    shell_error(sh, "Failed to get channel status");
-    return -EINVAL;
-  }
-  if ((status & STATUS_CHANNEL_STATE_MASK) != STATUS_TRACKING_CHANNEL) {
-    shell_error(sh, "Channel is not tracking, connect to sensor first");
-    return -EINVAL;
-  }
-  if (!device_number || !device_type || !transmit_type) {
-    shell_error(sh, "Device metadata is not correct");
-    return -EINVAL;
-  }
-
-  antplus_wakeup_slave_config[slot].transmission_type = transmit_type;
-  antplus_wakeup_slave_config[slot].device_type = device_type;
-  antplus_wakeup_slave_config[slot].device_number = device_number;
-  antplus_wakeup_slave_config[slot].channel_period =
-      antplus_generic_slave_config.channel_period;
-  char settings_name[] =
-      SETTINGS_ANT_SUBTREE "/" SETTINGS_ANT_WAKEUP_SEGMENT "/0";
-  settings_name[strlen(settings_name) - 1] = '0' + slot;
-
-  if (settings_save_one(settings_name, &antplus_wakeup_slave_config[slot],
-                        sizeof(antplus_wakeup_slave_config[slot])) != 0) {
-    shell_error(sh, "Failed to save wakeup ANT+ Slave");
-    return -EINVAL;
-  }
-  shell_print(sh, "Wakeup ANT+ Slave config slot %d set to %d %d %d", slot,
-              device_number, device_type, transmit_type);
-
-  return 0;
-}
-
-static int antplus_wakeup_slave_cmd_clear_handler(const struct shell *sh,
-                                                  size_t argc, char **argv,
-                                                  void *data) {
-  int err;
-  uint8_t slot_begin = 0;
-  uint8_t slot_end = ANT_WAKEUP_CHANNEL_SLOT_COUNT;
-  if (argc > 2) {
-    shell_error(sh, "Usage: %s <slot>", argv[0]);
-    return -ENOEXEC;
-  }
-  if (argc == 2) {
-    slot_begin = strtoul(argv[1], NULL, 10);
-    if (errno != 0 || slot_begin >= ANT_WAKEUP_CHANNEL_SLOT_COUNT) {
-      shell_error(sh, "Invalid slot: %s", argv[1]);
-      return -EINVAL;
-    }
-    slot_end = slot_begin + 1;
-  }
-  char settings_name[] =
-      SETTINGS_ANT_SUBTREE "/" SETTINGS_ANT_WAKEUP_SEGMENT "/0";
-  for (size_t i = slot_begin; i < slot_end; i++) {
-    settings_name[strlen(settings_name) - 1] = '0' + i;
-    err = settings_delete(settings_name);
-    if (err != 0) {
-      shell_error(sh, "Failed to clear wakeup ANT+ Slave config: %d", err);
-      continue;
-    }
-    antplus_wakeup_slave_config[i].device_number = 0;
-    antplus_wakeup_slave_config[i].device_type = 0;
-    antplus_wakeup_slave_config[i].channel_period = 0;
-  }
-  shell_print(sh, "Wakeup ANT+ Slave config cleared");
   return 0;
 }
 
@@ -285,10 +193,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
               antplus_generic_slave_cmd_start_handler),
     SHELL_CMD(stop, NULL, "Stop ANT+ Slave",
               antplus_generic_slave_cmd_stop_handler),
-    SHELL_CMD(set_wakeup, NULL, "Set wakeup ANT+ Slave",
-              antplus_wakeup_slave_cmd_set_handler),
-    SHELL_CMD(clear_wakeup, NULL, "Clear wakeup ANT+ Slave",
-              antplus_wakeup_slave_cmd_clear_handler),
     SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(ant_slave, &ant_slave_cmds, "ANT+ Slave",

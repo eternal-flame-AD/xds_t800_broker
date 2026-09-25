@@ -56,6 +56,18 @@ jobs:
               -DCONF_FILE="prj.conf"
             cp build/xds_t800_broker/zephyr/zephyr.hex "artifacts/xds_t800_broker_${target%/*}.hex"
           done
+          west build --build-dir build \
+            --board promicro_nrf52840/nrf52840/uf2 --pristine --sysbuild -- \
+            -DCONF_FILE="prj.conf" \
+            -DEXTRA_CONF_FILE="prj_promicro.conf" \
+            -DEXTRA_DTC_OVERLAY_FILE=boards/promicro_nrf52840_led_invert.overlay
+          cp build/xds_t800_broker/zephyr/zephyr.uf2 "artifacts/xds_t800_broker_promicro_nrf52840_nimh.uf2"
+          west build --build-dir build \
+            --board promicro_nrf52840/nrf52840/uf2 --pristine --sysbuild -- \
+            -DCONF_FILE="prj.conf" \
+            -DEXTRA_CONF_FILE="prj_18650.conf;prj_promicro.conf" \
+            -DEXTRA_DTC_OVERLAY_FILE=boards/promicro_nrf52840_led_invert.overlay
+          cp build/xds_t800_broker/zephyr/zephyr.uf2 "artifacts/xds_t800_broker_promicro_nrf52840_18650.uf2"
       - name: Create DFU packages
         run: |
           set -e

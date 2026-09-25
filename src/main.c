@@ -61,6 +61,17 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
                           (2 * BT_GAP_SCAN_FAST_INTERVAL),                     \
                           BT_GAP_SCAN_FAST_WINDOW)
 
+#if DT_NODE_EXISTS(DT_NODELABEL(vccpoweroff)) &&                               \
+    DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(vccpoweroff))
+
+const struct led_dt_spec vcc_poweroff_pin =
+    LED_DT_SPEC_GET(DT_NODELABEL(vccpoweroff));
+
+#define HAS_VCC_POWEROFF_PIN 1
+#else
+#define HAS_VCC_POWEROFF_PIN 0
+#endif
+
 static uint8_t connection_attempt_count = 0;
 
 struct central_profile_instance {
@@ -201,7 +212,7 @@ static void start_pairing_mode_work_handler(struct k_work *work) {
   bt_le_scan_stop();
   bt_conn_foreach(BT_CONN_TYPE_LE,
                   bt_conn_foreach_disconnect_connected_peripheral, NULL);
-  scan_start();
+  scan_start(false);
   for (int i = 0; i < 5; i++) {
     led_data_activity();
     k_sleep(K_MSEC(500));
@@ -217,7 +228,6 @@ static void btn_handler_fn(uint32_t button_state, uint32_t has_changed) {
   LOG_INF("Button state: %d, has_changed: %d", button_state, has_changed);
   if (has_changed) {
     if (button_state) {
-      poweroff_request_wakeup();
       last_button_press_time = k_uptime_get();
       k_work_reschedule(&start_pairing_mode_work, K_SECONDS(3));
     } else {
@@ -339,7 +349,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     return;
   }
 
-  if (rssi < -70) {
+  if (rssi < -75) {
     // ignore too weak signal
     return;
   }
@@ -409,7 +419,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
   }
 }
 
-static int scan_start(void) {
+static int scan_start(bool low_power) {
   if (!is_central_slot_open()) {
     return 0;
   }
@@ -441,7 +451,8 @@ static int scan_start(void) {
           all_known ? BT_LE_SCAN_TYPE_PASSIVE : BT_LE_SCAN_TYPE_ACTIVE,
           (all_known && fal_configured) ? BT_LE_SCAN_OPT_FILTER_ACCEPT_LIST
                                         : BT_LE_SCAN_OPT_NONE,
-          CONN_CREATE_PARAMS->interval, CONN_CREATE_PARAMS->window),
+          CONN_CREATE_PARAMS->interval * (low_power ? 8 : 1),
+          CONN_CREATE_PARAMS->window),
       scan_cb);
 
   if (err && err != -EALREADY) {
@@ -522,7 +533,7 @@ static void discovery_not_found_cb(struct bt_conn *conn, void *context) {
       instance->is_registered = true;
     }
     // restart scanning for other profiles if needed
-    scan_start();
+    scan_start(false);
   }
 }
 
@@ -530,7 +541,7 @@ static void discovery_error_found_cb(struct bt_conn *conn, int err,
                                      void *context) {
   LOG_ERR("Discovery procedure failed with %d, disconnecting", err);
   bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-  scan_start();
+  scan_start(false);
 }
 
 const struct bt_gatt_dm_cb discovery_cb = {
@@ -561,7 +572,7 @@ static void pairing_complete(struct bt_conn *conn, bool bonded) {
     if (err) {
       LOG_ERR("Failed to add peer to filter accept list (err %d)", err);
     }
-    scan_start();
+    scan_start(false);
   }
 }
 
@@ -617,7 +628,7 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       LOG_ERR("Connection attempt limit reached, resetting");
       sys_reboot(SYS_REBOOT_COLD);
     }
-    scan_start();
+    scan_start(false);
 
     if (instance) {
       instance->conn = NULL;
@@ -722,7 +733,7 @@ static void on_conn_recycled(void) {
   LOG_INF("Connection recycled");
   advertising_start();
 
-  scan_start();
+  scan_start(false);
 }
 
 void on_le_phy_updated(struct bt_conn *conn,
@@ -755,17 +766,6 @@ static void ant_evt_handler(ant_evt_t *p_ant_evt) {
              antplus_generic_slave_config.channel_number) {
     ant_generic_slave_evt_handler(p_ant_evt);
     return;
-  } else {
-    for (size_t i = 0; i < ANT_WAKEUP_CHANNEL_SLOT_COUNT; i++) {
-      if (p_ant_evt->channel == antplus_wakeup_slave_config[i].channel_number) {
-        if (p_ant_evt->event == EVENT_RX)
-          poweroff_request_wakeup();
-        if (p_ant_evt->event == EVENT_RX_SEARCH_TIMEOUT)
-          ant_channel_close(antplus_wakeup_slave_config[i].channel_number);
-
-        return;
-      }
-    }
   }
   LOG_ERR("Unknown channel: %d", p_ant_evt->channel);
 }
@@ -861,7 +861,7 @@ int bt_setup(void) {
 
   led_data_activity();
 
-  err = scan_start();
+  err = scan_start(false);
 
   if (err) {
     bt_disable();
@@ -876,6 +876,10 @@ int bt_setup(void) {
 int main_loop(void) {
   int err;
   bool low_batt = false;
+
+#if HAS_VCC_POWEROFF_PIN
+  led_on_dt(&vcc_poweroff_pin);
+#endif
 
   LOG_INIT();
   LOG_INF("Reset reason: %d", watchdog_get_reset_reason());
@@ -930,7 +934,10 @@ int main_loop(void) {
 
   gatt_sys_info_init();
 
+  led_set_bit(POWER_LED_BIT);
+
   int64_t no_activity_since_ms = k_uptime_get();
+  bool low_power = false;
 
   for (int i = 0;; i++) {
     err = battery_gauge_upkeep();
@@ -958,29 +965,33 @@ int main_loop(void) {
       no_activity_since_ms = k_uptime_get();
     }
 
+    if (CONFIG_LOW_POWER_TIMEOUT > 0) {
+      if (k_uptime_get() - no_activity_since_ms >
+          CONFIG_LOW_POWER_TIMEOUT * 1000) {
+        if (!low_power) {
+          low_power = true;
+          led_set_temp_dim(true);
+          scan_start(true);
+        }
+      } else {
+        if (low_power) {
+          low_power = false;
+          led_set_temp_dim(false);
+          scan_start(false);
+        }
+      }
+    }
+
 #if CONFIG_POWEROFF
     if (CONFIG_AUTO_POWER_OFF_TIMEOUT > 0 &&
         (k_uptime_get() - no_activity_since_ms) >
             CONFIG_AUTO_POWER_OFF_TIMEOUT * 1000) {
       LOG_INF("Auto power off triggered");
       enter_poweroff();
-      watchdog_feed();
-      advertising_start();
-      scan_start();
-      no_activity_since_ms = k_uptime_get();
     }
 #endif
 
-    k_sleep(K_MSEC(800));
-
-    if (low_batt)
-      led_set_bit(POWER_LED_BIT);
-    k_sleep(K_MSEC(50));
-
-    led_set_bit(POWER_LED_BIT);
-    k_sleep(K_MSEC(150));
-
-    led_clear_bit(POWER_LED_BIT);
+    k_sleep(K_MSEC(1000));
   }
 
   LOG_WRN("Main loop exited");

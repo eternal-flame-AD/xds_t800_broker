@@ -101,13 +101,7 @@ static void usb_msg_cb(struct usbd_context *const ctx,
   switch (msg->type) {
   case USBD_MSG_VBUS_READY:
     vbus_present = true;
-    static bool enable_once = true;
-    if (enable_once) {
-      err = usb_set_enabled(true);
-      if (err == 0) {
-        enable_once = false;
-      }
-    }
+    err = usb_set_enabled(true);
     if (err) {
       LOG_ERR("Failed to enable %s (%d)", "device support", err);
     }
