@@ -21,8 +21,15 @@
 
 - 最小方案：nRF52840 Dongle + 市面上常见的非稳压 3 节 AAA 转 USB 电池盒（电池直接接 VBUS）。
 
+  下图示例使用带一体外壳的克隆板，整体重量约 115g。
+
+  ![示例安装方式](assets/physical_dongle_nimh.jpg)
+
 - 最便宜方案：Nice!Nano 或 “Pro Micro nrf52840” 克隆板。
+  
   注意：由于 Adafruit UF2 引导程序的特性，刷入新固件后需要重新插拔 USB，串口才能正常工作。
+
+  这种方案通常能获得最低的待机电流，但需要外接锂电池并用导线连接，因此过安检时可能会遇到问题。
 
 - 坚固方案：nRF52840 Dongle 装入定制外壳，并焊接固定电池。需要参考 Nordic 的
   [硬件指南](https://docs.nordicsemi.com/r/bundle/ug_nrf52840_dongle/page/ug/nrf52840_dongle/hw_power_ext_reg_source.html)

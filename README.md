@@ -22,10 +22,17 @@ Measurement Service so that regular head units can read it.
 ### Physical Design
 
 - Minimal: nRF52840 Dongle with an off-the-shelf unregulated
-  3×AAA-to-USB adapter (battery wired directly to VBUS).
+  3×AAA-to-USB adapter (battery wired directly to VBUS). 
+  
+  The following setup uses a clone with a built-in enclosure and weighs ~115g.
+
+  ![Example setup](assets/physical_dongle_nimh.jpg)
 
 - Cheapest: Nice!Nano or "Pro Micro nrf52840" clone.
+
   Quirk due to the Adafruit UF2 bootloader: After flashing new firmware, USB needs to be reconnected for serial to work.
+
+  This generally gets you the best standby current, but requires an external lithium battery connected by wires and therefore could pose an issue through security checkpoints.
   
 - Robust: nRF52840 Dongle in a custom enclosure
   with a hardwired battery. Requires the regulator modification described in the
