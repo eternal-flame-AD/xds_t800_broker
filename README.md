@@ -8,13 +8,14 @@ Measurement Service so that regular head units can read it.
 
 ## Features
 
-- Low power consumption suitable for touring (<15 mW when USB is not enumerated and LED at 100%, ~5mW when disconnected).
+- Low power consumption suitable for touring (~5mW excluding LED).
 - Power, cadence and power balance readout
 - ANT+ Crankset Temperature (1degC precision)
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
 - Optional auto power-off feature. Press any button to the wake the dongle up.
+- LED with dimmable brightness and automatic dimming after ~1m of activity.
 
 ## Requirements
 
@@ -36,7 +37,7 @@ Power banks or OTG cables are not recommended: most will shut off under light lo
 
 | State | Consumption || 
 | --- | --- | ---|
-| Connected| ~4mW | ![Power when Connected](assets/power_connected.png) |
+| Connected (LED dimmed to 4%) | ~4mW | ![Power when Connected](assets/power_connected.png) |
 | Low power search | ~5mW | ![Power when Disconnected](assets/power_disconnected.png) |
 
 ### Custom battery gauge
