@@ -3,11 +3,17 @@
 #include "gatt_callbacks.h"
 #include <zephyr/bluetooth/gatt.h>
 
-static uint8_t battery_level = 50;
-static uint8_t battery_level_self = 50;
+static uint8_t battery_level = 100;
+static uint8_t battery_level_self = 100;
 static uint16_t battery_voltage = 0; // 0.01V
 
 #define BAS_BATTERY_LEVEL_STATUS_LEN 3
+
+#if CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT
+#define BT_UUID_BAS_INTERNAL_ALTN                                              \
+  BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(BT_UUID_BAS_VAL << 16, 0xfec3,        \
+                                         0x49e5, 0xbb59, 0xeec007b2e270))
+#endif
 
 static ssize_t
 bas_battery_energy_status_read_cb(struct bt_conn *conn,
@@ -38,12 +44,13 @@ static ssize_t bas_battery_level_read_cb(struct bt_conn *conn,
                                          const struct bt_gatt_attr *attr,
                                          void *buf, uint16_t len,
                                          uint16_t offset) {
-  uint8_t *data = (uint8_t *)buf;
-  if (offset == 0 && len > 0) {
-    data[0] = battery_level;
-    return 1;
-  }
-  return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+  uint8_t data =
+#if defined(CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT)
+      MIN(battery_level, battery_level_self);
+#else
+      battery_level;
+#endif // !defined(CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT)
+  return bt_gatt_attr_read(conn, attr, buf, len, offset, &data, 1);
 }
 
 static ssize_t bas_battery_level_status_self_read_cb(
@@ -71,22 +78,34 @@ const struct bt_gatt_cpf cpf_batt_internal = {
     .unit = 0x27ad,
 };
 
+#if !defined(CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT)
 const struct bt_gatt_cpf cpf_batt_external = {
     .format = 0x04,
     .description = 0x0110,
     .name_space = 0x01,
     .unit = 0x27ad,
 };
+#endif // !defined(CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT)
+
+BT_GATT_SERVICE_DEFINE(bas_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_BAS),
+                       BT_GATT_CHARACTERISTIC(BT_UUID_BAS_BATTERY_LEVEL,
+                                              BT_GATT_CHRC_READ,
+                                              BT_GATT_PERM_READ,
+                                              bas_battery_level_read_cb, NULL,
+                                              NULL)
+#if !defined(CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT)
+                           ,
+                       BT_GATT_CPF(&cpf_batt_external)
+#endif
+);
 
 BT_GATT_SERVICE_DEFINE(
-    bas_service_external, BT_GATT_PRIMARY_SERVICE(BT_UUID_BAS),
-    BT_GATT_CHARACTERISTIC(BT_UUID_BAS_BATTERY_LEVEL, BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ, bas_battery_level_read_cb, NULL,
-                           NULL),
-    BT_GATT_CPF(&cpf_batt_external));
-
-BT_GATT_SERVICE_DEFINE(
-    bas_service_self, BT_GATT_PRIMARY_SERVICE(BT_UUID_BAS),
+    bas_service_self,
+#if defined(CONFIG_BATTERY_GATT_SINGLE_SERVICE_COMPAT)
+    BT_GATT_PRIMARY_SERVICE(BT_UUID_BAS_INTERNAL_ALTN),
+#else
+    BT_GATT_PRIMARY_SERVICE(BT_UUID_BAS),
+#endif
     BT_GATT_CHARACTERISTIC(BT_UUID_BAS_BATTERY_LEVEL, BT_GATT_CHRC_READ,
                            BT_GATT_PERM_READ, bas_battery_level_self_read_cb,
                            NULL, NULL),

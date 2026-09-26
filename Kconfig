@@ -85,8 +85,15 @@ menu "Battery management"
 		int "Report 100% when cell voltage is at least this value"
 		default 1400
 
+	config BATTERY_GATT_SINGLE_SERVICE_COMPAT
+		bool "Use single minimal Battery Service for compatibility"
+		default y
+		help
+		  When enabled, only one Battery Service is presented on BLE and reports the lowest battery level.
+		  The onboard power gauge and voltage reading will be moved to an aliased service UUID
+		  (180f0000-fec3-49e5-bb59-eec007b2e270).
+		  When disabled, two Battery services are presented on BLE and reports the onboard power gauge and meter battery gauge independently.
 endmenu
-
 
 menu "ANT+ Product information"
 
