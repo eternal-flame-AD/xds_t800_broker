@@ -36,7 +36,7 @@ BT_GATT_SERVICE_DEFINE(
                            BT_GATT_PERM_NONE, NULL, NULL, NULL),
     BT_GATT_CCC(bt_ccc_write_cb, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE));
 
-static const uint8_t sensor_location = 6;
+static const uint8_t sensor_location = 15; // spider
 static const uint32_t cycling_power_feature =
     BIT(0) | BIT(3) | BIT(9) |
     BIT(20); //  Pedal Power Balance Supported, Cranks Revolution
