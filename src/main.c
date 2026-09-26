@@ -330,7 +330,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
       bt_le_scan_stop();
       int err = bt_conn_le_create(
           addr, CONN_CREATE_PARAMS,
-          BT_LE_CONN_PARAM(80, 120, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2000)),
+          BT_LE_CONN_PARAM(60, 100, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2500)),
           &central_profile_instances[i].conn);
 
       if (err) {
@@ -684,6 +684,12 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   LOG_WRN("Disconnected: %s, reason 0x%02x %s", addr, reason,
           bt_hci_err_to_str(reason));
 
+  struct bt_conn_info conn_info = {0};
+  int err = bt_conn_get_info(conn, &conn_info);
+  if (err) {
+    LOG_ERR("bt_conn_info() returned %d", err);
+  }
+
   struct central_profile_instance *instance =
       central_profile_instance_get(conn);
 
@@ -701,13 +707,15 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
 
     struct bt_conn *conn = atomic_ptr_clear((void **)&instance->conn);
     led_clear_bit(instance->led_idx);
-    if (conn)
+    if (conn) {
       bt_conn_unref(conn);
+    }
+  } else if (conn_info.role == BT_CONN_ROLE_CENTRAL) {
+    bt_conn_unref(conn);
   } else {
     if (atomic_ptr_cas((void **)&nus_conn, (void *)conn, NULL)) {
       shell_bt_nus_disable();
     }
-    bt_conn_unref(conn);
   }
 }
 

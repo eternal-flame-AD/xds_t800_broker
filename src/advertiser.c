@@ -30,7 +30,7 @@ static void bt_conn_foreach_count_central(struct bt_conn *conn, void *data) {
     return;
   }
   if (conn_info.type != BT_CONN_TYPE_LE ||
-      conn_info.state != BT_CONN_STATE_DISCONNECTED ||
+      conn_info.state != BT_CONN_STATE_CONNECTED ||
       conn_info.role != BT_CONN_ROLE_PERIPHERAL) {
     return;
   }
