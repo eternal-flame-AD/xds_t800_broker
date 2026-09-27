@@ -876,6 +876,12 @@ int bt_setup(void) {
     return err;
   }
 
+  bt_adv_set_device_number(ant_profiles_get_device_number());
+  if (err) {
+    LOG_ERR("Failed to set device number (err %d)", err);
+    return err;
+  }
+
   advertising_start();
 
   return 0;

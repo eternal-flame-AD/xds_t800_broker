@@ -1,4 +1,5 @@
 #include "ant_profiles.h"
+#include "advertiser.h"
 #include "ant_bike_power.h"
 #include <ant_channel_config.h>
 #include <stdlib.h>
@@ -41,7 +42,7 @@ ant_channel_config_t bpwr_environ_channel_config = {
 };
 
 ant_channel_config_t antplus_generic_slave_config = {
-    .channel_number = 4,
+    .channel_number = 2,
     .channel_type = 0,
     .ext_assign = 0,
     .rf_freq = 57,
@@ -104,6 +105,14 @@ int ant_profiles_set_device_number(uint32_t device_number, bool persist) {
     configs[i]->transmission_type &= 0x0F;
     configs[i]->transmission_type |= device_number_high << 4;
     configs[i]->device_number = device_number_low;
+  }
+
+  err = bt_adv_set_device_number(device_number);
+  if (err) {
+    LOG_ERR("Failed to set device number (err %d), BLE name will not be "
+            "updated until reboot",
+            err);
+    return err;
   }
   return 0;
 }
