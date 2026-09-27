@@ -88,14 +88,8 @@ west build --build-dir build \
 ```
 
 `local.conf.example` shows optional overrides for
-specialized setups (for example, calibrating battery gauge,
-enabling Bluetooth privacy or changing the
+specialized setups (for example, calibrating battery gauge or changing the
 Device Information Service strings). They are not recommended defaults!
-
-Bluetooth privacy is off by default. The typical use case is either no
-BLE connection at all, or only field-test connections via the
-bonded NUS shell. You can enable it in `local.conf` if you are using
-ANT+ only or are comfortable with the pairing workflow.
 
 ## Flashing
 
@@ -149,6 +143,27 @@ ANT+ will not be activated until a sensor is connected.
 
 ## Advanced Usage and Development
 
+### Bluetooth Privacy
+
+Peripheral advertising privacy is off by default. In public mode the broker
+advertises with its identity address and device name, which lets BLE head units
+discover and pair with it.
+
+Enabling private advertising rejects connection requests and
+hides the identity address and device name from
+scanners that are not currently bonded.
+
+This is useful if you use ANT+ and use BLE only for debugging with
+a bonded device that supports RPA resolution (typically phone, laptop, etc).
+
+You can toggle private advertising at runtime with the shell command:
+
+- `bt private` — show the current advertising mode (`Public` or `Private`).
+- `bt private 1` — enable private advertising.
+- `bt private 0` — return to public advertising.
+
+The selected mode is saved to flash and restored on reboot.
+
 ### Bluetooth UART shell
 
 The broker exposes a Zephyr shell over the Nordic UART Service (NUS) for
@@ -178,10 +193,13 @@ A Zephyr shell is available over the console UART (USB CDC ACM on the dongle)
 and, after bonding, over Bluetooth NUS. The following Bluetooth-related commands
 are provided by `src/shell_bt.c`:
 
-- `bt` — List Bluetooth identities and stored bonds.
+- `bt` — List Bluetooth identities, stored bonds, connections and the current
+  advertising mode.
 - `bt unpair` — Remove all bonds.
 - `bt unpair <address>` — Remove the bond for a specific address, for example
   `bt unpair DE:AD:BE:EF:00:00`.
+- `bt private [0|1]` — Get or set private advertising. Requires
+  `CONFIG_BT_PRIVACY=y` (the default).
 
 This might be helpful for removing no longer trusted devices or clearing
 up bond slots for new devices.
@@ -191,6 +209,14 @@ up bond slots for new devices.
 The broker is built around a `central_profile` abstraction so that the program
 can be adapted to work simultaneously with even more sensors
 without rewriting the Bluetooth scanning, connection, and discovery logic.
+
+The T-800 power meter is a "dumb" peripheral that accepts connections from any
+central, so the central role address is normally irrelevant. `CONFIG_BT_PRIVACY=y`
+(the default) causes the broker to use randomized resolvable addresses when
+acting as a central. You only need to think about this if you add a second BLE
+central profile whose target device cares about or filters the central address;
+disabling it requires setting `CONFIG_BT_PRIVACY=n`, which also disables private
+advertising.
 
 A profile is defined in `src/central_profile.h`:
 

@@ -1,3 +1,4 @@
+#include "advertiser.h"
 #include "zephyr/bluetooth/addr.h"
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -54,6 +55,7 @@ static int shell_bt_cmd_handler(const struct shell *shell, size_t argc,
 
   shell_print(shell, "Subcommands:");
   shell_print(shell, "  unpair - Unpair all bonds");
+  shell_print(shell, "  private [0|1] - Set private advertising");
 
   size_t count = CONFIG_BT_ID_MAX;
   bt_id_get(addrs, &count);
@@ -65,6 +67,9 @@ static int shell_bt_cmd_handler(const struct shell *shell, size_t argc,
   bt_foreach_bond(BT_ID_DEFAULT, print_bond_cb, (void *)shell);
   shell_print(shell, "Connections:");
   bt_conn_foreach(BT_CONN_TYPE_LE, print_conn_cb, (void *)shell);
+  shell_print(shell, "Advertiser kind: %s",
+              bt_adv_get_kind() == ADVERTISER_KIND_PRIVATE ? "Private"
+                                                           : "Public");
 
   return -EINVAL;
 }
@@ -95,7 +100,43 @@ static int shell_bt_cmd_unpair(const struct shell *shell, size_t argc,
   return 0;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(bt_sub, SHELL_CMD(unpair, NULL, "Unpair bonds",
-                                                 shell_bt_cmd_unpair));
+#if IS_ENABLED(CONFIG_BT_PRIVACY)
+static int shell_bt_cmd_private(const struct shell *shell, size_t argc,
+                                char **argv) {
+  if (argc != 1 && argc != 2) {
+    return -EINVAL;
+  }
+  enum advertiser_kind kind = bt_adv_get_kind();
+  if (argc == 1) {
+    shell_print(shell, "Advertiser kind: %s",
+                kind == ADVERTISER_KIND_PRIVATE ? "Private" : "Public");
+    return 0;
+  }
+
+  if (strcmp(argv[1], "1") == 0) {
+    shell_print(shell, "Setting advertiser kind to private");
+    bt_adv_set_kind(ADVERTISER_KIND_PRIVATE);
+  } else if (strcmp(argv[1], "0") == 0) {
+    shell_print(shell, "Setting advertiser kind to public");
+    bt_adv_set_kind(ADVERTISER_KIND_PUBLIC);
+  } else {
+    shell_error(shell, "Invalid argument: %s", argv[1]);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+#else
+static int shell_bt_cmd_private(const struct shell *shell, size_t argc,
+                                char **argv) {
+  shell_error(shell, "Bluetooth privacy is not enabled at build time");
+  return -ENOTSUP;
+}
+#endif /* IS_ENABLED(CONFIG_BT_PRIVACY) */
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+    bt_sub, SHELL_CMD(unpair, NULL, "Unpair bonds", shell_bt_cmd_unpair),
+    SHELL_CMD(private, NULL, "Get/set private advertising",
+              shell_bt_cmd_private));
 
 SHELL_CMD_REGISTER(bt, &bt_sub, "Bluetooth commands", shell_bt_cmd_handler);

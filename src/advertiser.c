@@ -1,18 +1,29 @@
 #include "advertiser.h"
+#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/settings/settings.h>
 
 LOG_MODULE_REGISTER(advertiser, LOG_LEVEL_INF);
 
+static enum advertiser_kind advertiser_kind = ADVERTISER_KIND_PUBLIC;
+
+static bool advertiser_kind_update_pending = false;
+
+#define SETTINGS_ADV_SUBTREE "adv"
+#define SETTINGS_ADV_KIND_SEGMENT "kind"
+
+// a generic "power meter"-like data
+// keep this anonymous for privacy
 static const struct bt_data ad[] = {
+    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA_BYTES(BT_DATA_GAP_APPEARANCE,
                   (CONFIG_BT_DEVICE_APPEARANCE >> 0) & 0xff,
                   (CONFIG_BT_DEVICE_APPEARANCE >> 8) & 0xff),
-    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_CPS_VAL),
                   BT_UUID_16_ENCODE(BT_UUID_BAS_VAL)),
 };
@@ -51,14 +62,36 @@ static void bt_conn_foreach_count_central(struct bt_conn *conn, void *data) {
 }
 
 static void adv_work_handler(struct k_work *work) {
-  int err = bt_le_adv_start(
-      BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, BT_GAP_MS_TO_ADV_INTERVAL(800),
-                      BT_GAP_MS_TO_ADV_INTERVAL(1200), NULL),
-      ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+  uint32_t options = BT_LE_ADV_OPT_CONN;
+  switch (advertiser_kind) {
+  case ADVERTISER_KIND_PUBLIC:
+    options |= BT_LE_ADV_OPT_USE_IDENTITY;
+    break;
+  case ADVERTISER_KIND_PRIVATE:
+    options |= BT_LE_ADV_OPT_FILTER_SCAN_REQ | BT_LE_ADV_OPT_FILTER_CONN;
+    break;
+  default:
+    advertiser_kind = ADVERTISER_KIND_PUBLIC;
+    options |= BT_LE_ADV_OPT_USE_IDENTITY;
+    return;
+  }
+  int err =
+      bt_le_adv_start(BT_LE_ADV_PARAM(options, BT_GAP_MS_TO_ADV_INTERVAL(800),
+                                      BT_GAP_MS_TO_ADV_INTERVAL(1200), NULL),
+                      ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 
   if (err && err != -EALREADY) {
     LOG_ERR("Advertising failed to start (err %d)", err);
     return;
+  }
+
+  if (advertiser_kind_update_pending) {
+    advertiser_kind_update_pending = false;
+    err = settings_save_one(SETTINGS_ADV_SUBTREE "/" SETTINGS_ADV_KIND_SEGMENT,
+                            &advertiser_kind, sizeof(advertiser_kind));
+    if (err) {
+      LOG_ERR("Failed to save advertiser kind (err %d)", err);
+    }
   }
 
   LOG_INF("Advertising successfully started");
@@ -106,3 +139,49 @@ int bt_adv_set_device_number(uint32_t device_number) {
   }
   return 0;
 }
+
+#if IS_ENABLED(CONFIG_BT_PRIVACY)
+void bt_adv_set_kind(enum advertiser_kind kind) {
+  if (advertiser_kind == kind) {
+    return;
+  }
+  LOG_INF("Setting advertiser kind to %d", kind);
+  advertiser_kind = kind;
+  bt_le_adv_stop();
+  advertising_start();
+  advertiser_kind_update_pending = true;
+}
+#else
+void bt_adv_set_kind(enum advertiser_kind kind) {
+  if (kind != ADVERTISER_KIND_PUBLIC) {
+    LOG_ERR("Bluetooth privacy is not enabled at build time! Will advertise as "
+            "public.");
+    return;
+  }
+}
+#endif /* IS_ENABLED(CONFIG_BT_PRIVACY) */
+
+enum advertiser_kind bt_adv_get_kind(void) { return advertiser_kind; }
+
+static int bt_adv_settings_set(const char *name, size_t len,
+                               settings_read_cb read_cb, void *cb_arg) {
+  const char *next;
+  int rc;
+
+  if (settings_name_steq(name, SETTINGS_ADV_KIND_SEGMENT, &next) && !next) {
+    enum advertiser_kind kind;
+    if (len != sizeof(kind)) {
+      return -EINVAL;
+    }
+    rc = read_cb(cb_arg, &kind, sizeof(kind));
+    if (rc >= 0) {
+      bt_adv_set_kind(kind);
+    }
+    return rc;
+  }
+
+  return -ENOENT;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(adv, SETTINGS_ADV_SUBTREE, NULL,
+                               bt_adv_settings_set, NULL, NULL);

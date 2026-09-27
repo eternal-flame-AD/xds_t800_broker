@@ -80,9 +80,7 @@ west build --build-dir build \
   -DDTC_OVERLAY_FILE=boards/nrf52840dongle_nrf52840.overlay
 ```
 
-`local.conf.example` 中提供了一些可选的覆盖示例，例如校准电量计、启用蓝牙隐私或修改设备信息服务字符串。这些**不是**推荐默认配置！
-
-默认关闭蓝牙隐私。典型使用场景是：完全不使用 BLE，或者仅通过已绑定的设备进行现场测试。如果你明确使用 ANT+ 连接或熟悉配对流程，可以在 `local.conf` 中启用。由于很多码表对隐私支持不佳，日常连接码表时建议保持关闭。
+`local.conf.example` 中提供了一些可选的覆盖示例，例如校准电量计或修改设备信息服务字符串。这些**不是**推荐默认配置！
 
 ## 烧录
 
@@ -128,6 +126,22 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 ## 高级用法与开发
 
+### 蓝牙隐私
+
+外围设备广播隐私默认为关闭。公共模式下，转发器使用其身份地址和设备名称进行广播，以便 BLE 码表可以发现并配对。
+
+开启私密广播后，未绑定设备将无法看到身份地址和设备名称，也无法发起连接。
+
+如果你使用 ANT+，并且只把 BLE 用于与已绑定设备（通常是手机、电脑等支持 RPA 解析的设备）进行调试，可以考虑使用。
+
+你可以在运行时通过 shell 命令切换私密广播：
+
+- `bt private` — 显示当前广播模式（`Public` 或 `Private`）。
+- `bt private 1` — 开启私密广播。
+- `bt private 0` — 恢复公共广播。
+
+选择的模式会保存到 Flash，并在重启后恢复。
+
 ### 蓝牙 UART Shell
 
 转发器通过 Nordic UART Service（NUS）暴露一个 Zephyr shell，方便现场测试。
@@ -150,15 +164,18 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 Zephyr shell 可通过控制台 UART（Dongle 上为 USB CDC ACM）访问，绑定后也可通过蓝牙 NUS 访问。`src/shell_bt.c` 提供以下蓝牙相关命令：
 
-- `bt` — 列出蓝牙身份和已保存的绑定。
+- `bt` — 列出蓝牙身份、已保存的绑定、当前连接以及当前广播模式。
 - `bt unpair` — 删除所有绑定。
 - `bt unpair <address>` — 删除指定地址的绑定，例如 `bt unpair DE:AD:BE:EF:00:00`。
+- `bt private [0|1]` — 获取或设置私密广播。需要 `CONFIG_BT_PRIVACY=y`（默认已启用）。
 
 这有助于移除不再信任的设备，或为新设备腾出绑定槽位。
 
 ### Central 配置文件系统
 
 转发器基于 `central_profile` 抽象实现，这样无需重写蓝牙扫描、连接和发现逻辑，就能同时适配更多传感器。
+
+T-800 功率计是一个不限制中央设备地址的外设，任何 central 都能连接，因此 central 角色的地址通常无关紧要。`CONFIG_BT_PRIVACY=y`（默认值）会让转发器在作为 central 时使用随机可解析地址。只有当你添加第二个 BLE central 配置文件，且目标设备在意或会过滤 central 地址时，才需要考虑这一点；禁用该选项需要在 `local.conf` 中设置 `CONFIG_BT_PRIVACY=n`，但这同时也会禁用私密广播。
 
 `src/central_profile.h` 中定义的配置文件如下：
 
