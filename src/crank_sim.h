@@ -9,7 +9,7 @@ struct bt_crank_revolution_s {
 };
 
 struct crank_sim_s {
-  uint32_t total_revolutions;
+  uint32_t total_revolutions_frac;
   uint32_t completed_revolutions;
   uint32_t last_data_time;
   uint32_t last_rev_time;

@@ -3,6 +3,7 @@
 
 #define ONE_ROTATION (4096)
 #define ONE_MINUTE_IN_TICKS (CONFIG_SYS_CLOCK_TICKS_PER_SEC * 60)
+#define AUTO_ZERO_TIMEOUT (5)
 
 BUILD_ASSERT(ONE_MINUTE_IN_TICKS % ONE_ROTATION == 0,
              "one_minute_in_ticks must be divisible by one_rotation");
@@ -31,15 +32,37 @@ BUILD_ASSERT(CONFIG_SYS_CLOCK_TICKS_PER_SEC > 0 &&
 
 #endif /* HAVE_TYPEOF */
 
+#define MAX_SUPPORTED_RPM                                                      \
+  (UINT32_MAX / (AUTO_ZERO_TIMEOUT * CONFIG_SYS_CLOCK_TICKS_PER_SEC))
+
+BUILD_ASSERT(MAX_SUPPORTED_RPM >= 255,
+             "MAX_SUPPORTED_RPM is less than 255 rpm, system tick rate is too "
+             "high");
+
 bool crank_sim_update(struct crank_sim_s *crank_sim, uint16_t rpm,
                       uint32_t current_ticks) {
+#if MAX_SUPPORTED_RPM < UINT16_MAX
+  if (rpm > MAX_SUPPORTED_RPM) {
+    rpm = MAX_SUPPORTED_RPM;
+  }
+#endif
+
+  // a minimal time-domain integration model
+  // this is tested to produce well below <0.5rpm jitter
+  // and <<0.1% long-term integration error
+  //
+  // this is good enough for the T-800 power meter
+  // as it only reports 1 cadence value per second
+  // BLE notification delivery latency/jitter will
+  // dominate the actual integration error against
+  // the real number of crank revolutions
 
   bool new_rev = false;
   uint32_t time_delta = current_ticks - crank_sim->last_data_time;
 
   // lost data for too long, reset
   if (!crank_sim->last_data_time ||
-      time_delta > 5 * CONFIG_SYS_CLOCK_TICKS_PER_SEC) {
+      time_delta > AUTO_ZERO_TIMEOUT * CONFIG_SYS_CLOCK_TICKS_PER_SEC) {
     crank_sim->last_data_time = current_ticks;
     crank_sim->last_rev_time = current_ticks;
     return false;
@@ -47,21 +70,22 @@ bool crank_sim_update(struct crank_sim_s *crank_sim, uint16_t rpm,
 
   uint32_t d = rpm * time_delta;
   uint32_t d_crank_position = ROUND_DIV(d, ONE_MINUTE_IN_TICKS / ONE_ROTATION);
-  crank_sim->total_revolutions += d_crank_position;
+  crank_sim->total_revolutions_frac += d_crank_position;
 
-  if (crank_sim->total_revolutions / ONE_ROTATION !=
+  if (crank_sim->total_revolutions_frac / ONE_ROTATION !=
       crank_sim->completed_revolutions) {
     new_rev = true;
 
-    uint32_t fractional_position = crank_sim->total_revolutions % ONE_ROTATION;
+    uint32_t fractional_position =
+        crank_sim->total_revolutions_frac % ONE_ROTATION;
     time_delta = current_ticks - crank_sim->last_rev_time;
     crank_sim->last_rev_time =
         current_ticks -
         ROUND_DIV(time_delta * fractional_position,
-                  crank_sim->total_revolutions -
+                  crank_sim->total_revolutions_frac -
                       crank_sim->completed_revolutions * ONE_ROTATION);
     crank_sim->completed_revolutions =
-        crank_sim->total_revolutions / ONE_ROTATION;
+        crank_sim->total_revolutions_frac / ONE_ROTATION;
   }
   crank_sim->last_data_time = current_ticks;
 
