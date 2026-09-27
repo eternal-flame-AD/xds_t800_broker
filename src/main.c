@@ -73,6 +73,9 @@ const struct led_dt_spec vcc_poweroff_pin =
 #endif
 
 static uint8_t connection_attempt_count = 0;
+static bool low_power = false;
+
+static int scan_start();
 
 struct central_profile_instance {
   const struct central_profile *profile;
@@ -212,7 +215,8 @@ static void start_pairing_mode_work_handler(struct k_work *work) {
   bt_le_scan_stop();
   bt_conn_foreach(BT_CONN_TYPE_LE,
                   bt_conn_foreach_disconnect_connected_peripheral, NULL);
-  scan_start(false);
+  low_power = false;
+  scan_start();
   for (int i = 0; i < 5; i++) {
     led_data_activity();
     k_sleep(K_MSEC(500));
@@ -419,7 +423,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
   }
 }
 
-static int scan_start(bool low_power) {
+static int scan_start() {
   if (!is_central_slot_open()) {
     return 0;
   }
@@ -533,7 +537,7 @@ static void discovery_not_found_cb(struct bt_conn *conn, void *context) {
       instance->is_registered = true;
     }
     // restart scanning for other profiles if needed
-    scan_start(false);
+    scan_start();
   }
 }
 
@@ -541,7 +545,7 @@ static void discovery_error_found_cb(struct bt_conn *conn, int err,
                                      void *context) {
   LOG_ERR("Discovery procedure failed with %d, disconnecting", err);
   bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-  scan_start(false);
+  scan_start();
 }
 
 const struct bt_gatt_dm_cb discovery_cb = {
@@ -572,7 +576,7 @@ static void pairing_complete(struct bt_conn *conn, bool bonded) {
     if (err) {
       LOG_ERR("Failed to add peer to filter accept list (err %d)", err);
     }
-    scan_start(false);
+    scan_start();
   }
 }
 
@@ -628,7 +632,7 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       LOG_ERR("Connection attempt limit reached, resetting");
       sys_reboot(SYS_REBOOT_COLD);
     }
-    scan_start(false);
+    scan_start();
 
     if (instance) {
       instance->conn = NULL;
@@ -670,6 +674,9 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
       return;
     }
+
+    // start scanning for other profiles
+    scan_start();
   } else {
     advertising_start();
     bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
@@ -741,7 +748,7 @@ static void on_conn_recycled(void) {
   LOG_INF("Connection recycled");
   advertising_start();
 
-  scan_start(false);
+  scan_start();
 }
 
 void on_le_phy_updated(struct bt_conn *conn,
@@ -869,7 +876,7 @@ int bt_setup(void) {
 
   led_data_activity();
 
-  err = scan_start(false);
+  err = scan_start();
 
   if (err) {
     bt_disable();
@@ -951,7 +958,6 @@ int main_loop(void) {
   led_set_bit(POWER_LED_BIT);
 
   int64_t no_activity_since_ms = k_uptime_get();
-  bool low_power = false;
 
   for (int i = 0;; i++) {
     err = battery_gauge_upkeep();
@@ -985,13 +991,13 @@ int main_loop(void) {
         if (!low_power) {
           low_power = true;
           led_set_temp_dim(true);
-          scan_start(true);
+          scan_start();
         }
       } else {
         if (low_power) {
           low_power = false;
           led_set_temp_dim(false);
-          scan_start(false);
+          scan_start();
         }
       }
     }
