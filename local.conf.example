@@ -1,12 +1,21 @@
 # scale ADC reading by 605/600
+# ADC 读数按 605/600 缩放
 CONFIG_BATTERY_GAUGE_ADC_REFERENCE_VOLTAGE=605
 
-# enhanced resilience against firmware bugs by 
-# rebooting instead of bailing to bootloader
-# might cause boot-loop on hardware variants that lack a RESET button
-CONFIG_RESET_ON_FATAL_ERROR=y
+# when set to n, device will bail to bootloader
+# instead of rebooting to application on fatal error
+#
+# useful for debugging with devices that does not have
+# an easily accessible hardware bootloader entry
+#
+# 设置为 n 时，设备在发生致命错误时会进入引导加载程序，
+# 而不是重启到应用程序。
+#
+# 适用于没有容易访问的硬件引导加载程序入口的设备调试。
+CONFIG_RESET_ON_FATAL_ERROR=n
 
 # BLE device information template
+# 蓝牙设备信息模板
 
 CONFIG_BT_DEVICE_NAME="ZX25T_EMU"
 
@@ -17,6 +26,7 @@ CONFIG_BT_DIS_HW_REV=y
 CONFIG_BT_DIS_HW_REV_STR="CR50J"
 
 # alternative battery gauge template
+# 替代电池电量计模板
 
 CONFIG_BATTERY_CELL_COUNT=1
 CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_100=4100
