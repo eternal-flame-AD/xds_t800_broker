@@ -35,6 +35,7 @@ struct ant_bike_power_s {
   uint8_t pwr_distribution_right;
   uint8_t instantaneous_cadence;
   uint8_t battery_request_idx;
+  uint8_t battery_request_ctr;
 
   struct k_mutex update_mutex;
 

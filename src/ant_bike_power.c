@@ -121,7 +121,8 @@ void ant_bike_power_calib_response(struct ant_bike_power_s *profile,
 
 static void encode_page82(const struct ant_bike_power_s *profile,
                           uint8_t batt_idx, uint8_t *output_payload) {
-  if (batt_idx >= 2) {
+  if (batt_idx >= BATT_IDX_LOWEST) {
+    // in ANT+ the larger the value is the "worse" the battery is
     batt_idx = (profile->battery_state_self > profile->battery_state)
                    ? BATT_IDX_SELF
                    : BATT_IDX_REMOTE;
@@ -192,11 +193,12 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
     }
 
     // if we have a battery request
-    if (profile->battery_request_idx != BATT_IDX_INVALID) {
+    if (profile->battery_request_idx != BATT_IDX_INVALID &&
+        profile->battery_request_ctr > 0) {
+      profile->battery_request_ctr--;
       encode_page82(profile, profile->battery_request_idx, output_payload);
       ant_broadcast_message_tx(p_ant_evt->channel, sizeof(output_payload),
                                (uint8_t *)output_payload);
-      profile->battery_request_idx = BATT_IDX_INVALID;
       return;
     }
 
@@ -242,13 +244,19 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
       if (p_ant_evt->message.ANT_MESSAGE_aucPayload[0] == 70 &&
           p_ant_evt->message.ANT_MESSAGE_aucPayload[6] == 82) {
         uint8_t batt_idx = p_ant_evt->message.ANT_MESSAGE_aucPayload[3];
-        if (batt_idx == BATT_IDX_LOWEST) {
-          profile->battery_request_idx = BATT_IDX_LOWEST;
-        } else if (batt_idx == BATT_IDX_SELF) {
-          profile->battery_request_idx = BATT_IDX_SELF;
-        } else {
-          profile->battery_request_idx = BATT_IDX_INVALID;
+        uint8_t ctr = p_ant_evt->message.ANT_MESSAGE_aucPayload[5] & (~0x80);
+        if (ctr == 0) {
+          // invalid per spec, ignore
+          return;
         }
+        // 5 seconds max @ 4Hz
+        ctr = MIN(ctr, 4 * 5);
+        if (batt_idx == BATT_IDX_REMOTE || batt_idx == BATT_IDX_SELF) {
+          profile->battery_request_idx = batt_idx;
+        } else {
+          profile->battery_request_idx = BATT_IDX_LOWEST;
+        }
+        profile->battery_request_ctr = ctr;
       }
     }
   } break;
