@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(leds, LOG_LEVEL_INF);
 
 const uint8_t brightness_options[] = {100, 75, 50, 4};
 
-static uint8_t brightness_index = 0;
+static uint8_t brightness_index = 2;
 
 static bool temp_dim = false;
 
