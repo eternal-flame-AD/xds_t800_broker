@@ -30,13 +30,11 @@ jobs:
         id: cache-sdk
         with:
           path: ~/sdk_ant
-          key: ${{ runner.os }}-sdk
+          key: ${{ runner.os }}-sdk-v2.1.1
       - name: Checkout SDK
         if: ${{ steps.cache-sdk.outputs.cache-hit != 'true' }}
-        env:
-            SDK_ANT_CLONE_URL: ${{ secrets.SDK_ANT_CLONE_URL }}
         run: |
-          west init -m "${SDK_ANT_CLONE_URL}" --mr main "${HOME}/sdk_ant"
+          west init -m "https://github.com/ant-nrfconnect/sdk-ant" --mr v2.1.1 "${HOME}/sdk_ant"
       - name: Update SDK
         run: |
           cd "${HOME}/sdk_ant"
