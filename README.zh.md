@@ -52,15 +52,19 @@
 
 ### 开发环境
 
-- nRF Connect SDK (NCS) v3.2.4
-- 已克隆到 NCS 目录下的 ANT SDK 模块（`<NCS>/ant`）。该模块版本必须与 NCS 版本匹配，否则可能出现无线电静默！
+- nRF Connect SDK (NCS) v3.2.4 或以上
 - nRF52840 Dongle 或任何具备必要外设的兼容 nRF52 开发板（比如 52840 DK）
+
+如果需要启用 ANT+ 支持，额外需要：
+
+- 已克隆到 NCS 目录下的 ANT SDK 模块（`<NCS>/ant`）。该模块版本必须与 NCS 版本匹配 （目前 v3.2.4），否则可能出现无线电静默！
 
 ## 配置层级
 
 配置分为三层，便于在不改动固定功能的前提下，单独管理每次部署的个性化设置：
 
 - `prj.conf` — 必需的子系统和功能选择。通常不需要手动修改。
+- `prj_ant.conf` — 启用 ANT+ 必需的子系统和功能选择。
 - `Kconfig.defconfig` — 上游 Kconfig 符号的出厂默认值，例如蓝牙设备名称和设备信息服务字符串。
 - `local.conf` — 每次构建时的本地覆盖。大多数用户可以直接留空。
 
@@ -75,7 +79,7 @@ mkdir build
 west build --build-dir build \
   --board nrf52840dongle/nrf52840 \
   --sysbuild -- \
-  -DCONF_FILE="prj.conf" \
+  -DCONF_FILE="prj.conf;prj_ant.conf" \
   -DEXTRA_CONF_FILE="local.conf" \
   -DDTC_OVERLAY_FILE=boards/nrf52840dongle_nrf52840.overlay
 ```

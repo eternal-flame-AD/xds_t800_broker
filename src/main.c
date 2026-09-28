@@ -6,7 +6,9 @@
 #include <bluetooth/gatt_dm.h>
 #include <shell/shell_bt_nus.h>
 
+#if IS_ENABLED(CONFIG_ANT)
 #include <ant_key_manager.h>
+#endif
 
 #include <zephyr/bluetooth/assigned_numbers.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -30,9 +32,12 @@
 #include <dk_buttons_and_leds.h>
 
 #include "advertiser.h"
+#if IS_ENABLED(CONFIG_ANT)
 #include "ant_init.h"
 #include "ant_parameters.h"
 #include "ant_profiles.h"
+#include "shell_ant_slave.h"
+#endif
 #include "battery_gauge.h"
 #include "bootloader.h"
 #include "cac_acm_serial.h"
@@ -42,7 +47,6 @@
 #include "gatt_system_info.h"
 #include "leds.h"
 #include "poweroff.h"
-#include "shell_ant_slave.h"
 #include "watchdog.h"
 
 #include "main.h"
@@ -769,6 +773,8 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
     .le_phy_updated = on_le_phy_updated,
 };
 
+#if IS_ENABLED(CONFIG_ANT)
+
 static void ant_evt_handler(ant_evt_t *p_ant_evt) {
 
   if (p_ant_evt->channel == bpwr_channel_config.channel_number) {
@@ -834,6 +840,8 @@ static int ant_profile_setup(void) {
   return 0;
 }
 
+#endif
+
 static void setup_accept_list_cb(const struct bt_bond_info *info,
                                  void *user_data) {
   int *bond_cnt = user_data;
@@ -883,11 +891,13 @@ int bt_setup(void) {
     return err;
   }
 
-  bt_adv_set_device_number(ant_profiles_get_device_number());
+#if IS_ENABLED(CONFIG_ANT)
+  err = bt_adv_set_device_number(ant_profiles_get_device_number());
   if (err) {
     LOG_ERR("Failed to set device number (err %d)", err);
     return err;
   }
+#endif
 
   advertising_start();
 
@@ -917,6 +927,7 @@ int main_loop(void) {
     return err;
   }
 
+#if IS_ENABLED(CONFIG_ANT)
   err = ant_stack_setup();
   if (err) {
     LOG_ERR("ANT stack setup failed (err %d)", err);
@@ -928,6 +939,7 @@ int main_loop(void) {
     LOG_ERR("ANT profile setup failed (err %d)", err);
     return err;
   }
+#endif
 
   err = shell_bt_nus_init();
   if (err) {
@@ -972,8 +984,10 @@ int main_loop(void) {
                 LOW_BATTERY_THRESHOLD + LOW_BATTERY_THRESHOLD_HYSTERESIS;
 
     bas_battery_level_self_set(battery_level, battery_mv);
+#if IS_ENABLED(CONFIG_ANT)
     ant_bike_power_set_self_battery_state(&bike_power, battery_level,
                                           battery_mv);
+#endif
     if (low_batt) {
       ((i % 2) ? led_set_bit : led_clear_bit)(POWER_LED_BIT);
     }

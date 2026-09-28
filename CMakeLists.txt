@@ -62,11 +62,6 @@ target_sources(app PRIVATE
   src/gatt_callbacks.c
   src/gatt_battery.c
   src/gatt_system_info.c
-  src/ant_profiles.c
-  src/ant_bike_power.c
-  src/ant_environ.c
-  src/shell_ant_slave.c
-  src/shell_ant_master.c
   src/shell_flush.c
   src/shell_bt.c
   src/shell_poweroff.c
@@ -77,6 +72,14 @@ target_sources(app PRIVATE
   src/crank_sim.c
   src/cdc_acm_serial.c
   src/main.c
+)
+
+target_sources_ifdef(CONFIG_ANT app PRIVATE
+  src/ant_profiles.c
+  src/ant_bike_power.c
+  src/ant_environ.c
+  src/shell_ant_slave.c
+  src/shell_ant_master.c
 )
 
 

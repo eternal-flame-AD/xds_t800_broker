@@ -8,9 +8,12 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 
+#if IS_ENABLED(CONFIG_ANT)
 #include "ant_bike_power.h"
 #include "ant_interface.h"
 #include "ant_profiles.h"
+#endif
+
 #include "crank_sim.h"
 #include "gatt_battery.h"
 #include "gatt_callbacks.h"
@@ -128,7 +131,9 @@ static uint8_t read_dis_serial_number_cb(struct bt_conn *conn, uint8_t err,
     serial_number = serial_number * 10 + (number_buffer[i] - '0');
   }
   LOG_INF("DIS serial number: %d", serial_number);
+#if IS_ENABLED(CONFIG_ANT)
   ant_bike_power_set_serial_number(&bike_power, serial_number);
+#endif
   return BT_GATT_ITER_STOP;
 }
 
@@ -207,7 +212,9 @@ static void calibration_write_cb(struct bt_conn *conn, uint8_t err,
                                  struct bt_gatt_write_params *params) {
   if (err != 0) {
     LOG_ERR("Calibration write failed: %d", err);
+#if IS_ENABLED(CONFIG_ANT)
     ant_bike_power_calib_response(&bike_power, false, -3);
+#endif
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x04;
       cpcp_indicate_params.len = 3;
@@ -238,6 +245,7 @@ int central_t800_offset_compensation_start(void) {
   return 0;
 }
 
+#if IS_ENABLED(CONFIG_ANT)
 void central_t800_offset_compensation_start_ant(
     struct ant_bike_power_s *profile) {
   int res = central_t800_offset_compensation_start();
@@ -245,6 +253,7 @@ void central_t800_offset_compensation_start_ant(
     ant_bike_power_calib_response(profile, false, res);
   }
 }
+#endif
 
 static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
                                  struct bt_gatt_read_params *params,
@@ -268,13 +277,17 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
     internal_calibration_data = incoming[1] | (incoming[2] << 8);
     uint16_t weight_raw = incoming[3] | (incoming[4] << 8);
     weight = (int16_t)weight_raw;
+#if IS_ENABLED(CONFIG_ANT)
     ant_environ_temp_set(&environ, temp);
+#endif
 
     LOG_DBG("temp=%d, adj=%d, force=%dcgF", temp, internal_calibration_data,
             weight);
   }
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
+#if IS_ENABLED(CONFIG_ANT)
     ant_bike_power_calib_response(&bike_power, true, internal_calibration_data);
+#endif
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x01;
       cpcp_data_buf[3] = internal_calibration_data & 0xFF;
@@ -310,7 +323,9 @@ bt_gatt_notify_func_bas_battery_level(struct bt_conn *conn,
     uint8_t *incoming = (uint8_t *)data;
     uint8_t new_battery_level = incoming[0];
     if (new_battery_level > 0 && new_battery_level <= 100) {
+#if IS_ENABLED(CONFIG_ANT)
       ant_bike_power_set_battery_state(&bike_power, new_battery_level);
+#endif
       bas_battery_level_set(new_battery_level);
       LOG_INF("Battery level: %d", new_battery_level);
     }
@@ -343,7 +358,9 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
           return BT_GATT_ITER_CONTINUE;
         }
       }
+#if IS_ENABLED(CONFIG_ANT)
       ant_bike_power_calib_response(&bike_power, true, 0);
+#endif
       if (cpcp_data_buf[0] == 0x20) {
         cpcp_data_buf[2] = 0x01;
         cpcp_data_buf[3] = 0xff;
@@ -358,7 +375,9 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
       }
     } else {
       LOG_ERR("SC CP calibration failed (%d)", status);
+#if IS_ENABLED(CONFIG_ANT)
       ant_bike_power_calib_response(&bike_power, false, status);
+#endif
       if (cpcp_data_buf[0] == 0x20) {
         cpcp_data_buf[2] = 0x04;
         cpcp_indicate_params.len = 3;
@@ -441,8 +460,10 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
     out[2] = totPower & 0xFF;
     out[3] = (totPower >> 8) & 0xFF;
 
+#if IS_ENABLED(CONFIG_ANT)
     ant_bike_power_update(&bike_power, totPower, (200 - out[4]) / 2,
                           cadence < 0 ? 0 : cadence, angle);
+#endif
 
     if (cadence > 0) {
       crank_sim_update(&crank_sim, cadence, now_ticks);
@@ -597,8 +618,9 @@ static int on_discovery(struct bt_gatt_dm *dm) {
 }
 
 static void on_connected(struct bt_conn *conn) {
-  int err;
   LOG_INF("on_connected");
+#if IS_ENABLED(CONFIG_ANT)
+  int err;
   err = ant_channel_open(bpwr_channel_config.channel_number);
   if (err) {
     LOG_ERR("Failed to open main channel: %d", err);
@@ -607,6 +629,7 @@ static void on_connected(struct bt_conn *conn) {
   if (err) {
     LOG_ERR("Failed to open environ channel: %d", err);
   }
+#endif
   k_timer_user_data_set(&cps_stuck_sensor_timer, conn);
   last_data_ms = k_uptime_get();
   central_conn = conn;
@@ -617,12 +640,16 @@ static void on_connected(struct bt_conn *conn) {
 static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   central_conn = NULL;
   LOG_INF("on_disconnected, reason: %d", reason);
+#if IS_ENABLED(CONFIG_ANT)
   ant_channel_close(bpwr_channel_config.channel_number);
   ant_channel_close(bpwr_environ_channel_config.channel_number);
+#endif
   k_timer_stop(&cps_stuck_sensor_timer);
   k_timer_user_data_set(&cps_stuck_sensor_timer, NULL);
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
+#if IS_ENABLED(CONFIG_ANT)
     ant_bike_power_calib_response(&bike_power, true, 0);
+#endif
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x01;
       cpcp_data_buf[3] = 0xff;

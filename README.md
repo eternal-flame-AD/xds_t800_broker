@@ -55,9 +55,12 @@ cell count and discharge curve. The defaults are tuned for three Ni-MH cells.
 
 ### Development
 
-- nRF Connect SDK (NCS) v3.2.4.
-- ANT SDK module cloned under the NCS tree (`<NCS>/ant`). The SDK module must be compatible with the SDK per the release notes, otherwise you might experience radio silence!
+- nRF Connect SDK (NCS) v3.2.4 or higher.
 - nRF52840 Dongle or any compatible nRF52 board with the necessary peripherals defined (such as 52840 DK).
+
+For builds with ANT+ support:
+
+- ANT SDK module cloned under the NCS tree (`<NCS>/ant`). The SDK module must be compatible with the SDK per their release notes (exactly v3.2.4 as of 2026), otherwise you might experience radio silence!
 
 ## Configuration layers
 
@@ -66,6 +69,7 @@ touch the fixed feature list:
 
 - `prj.conf` — Required subsystem and feature selections. You generally do not
   edit this.
+- `prj_ant.conf` - Required feature selections to enable ANT+ support.
 - `Kconfig.defconfig` — Factory defaults for upstream Kconfig symbols such as the
   Bluetooth device name and Device Information Service strings.
 - `local.conf` — Per-build local overrides. Most users can simply leave this empty.
@@ -82,7 +86,7 @@ mkdir build
 west build --build-dir build \
   --board nrf52840dongle/nrf52840 \
   --sysbuild -- \
-  -DCONF_FILE="prj.conf" \
+  -DCONF_FILE="prj.conf;prj_ant.conf" \
   -DEXTRA_CONF_FILE="local.conf" \
   -DDTC_OVERLAY_FILE=boards/nrf52840dongle_nrf52840.overlay
 ```
