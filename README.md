@@ -42,10 +42,15 @@ Power banks or OTG cables are not recommended: most will shut off under light lo
 
 ## Power consumption
 
+These assume typical operation conditions: 
+
+- The default 50% LED brightness option is used.
+- A T-800 sensor is already paired and persisted in flash.
+
 | State | Consumption || 
 | --- | --- | ---|
-| Connected (LED dimmed to 4%) | ~4mW | ![Power when Connected](assets/power_connected.png) |
-| Low power search | ~5mW | ![Power when Disconnected](assets/power_disconnected.png) |
+| Connected | ~6.4mW | ![Power when Connected](assets/power_connected.png) |
+| Low power search | ~3.7mW | ![Power when Disconnected](assets/power_disconnected.png) |
 
 ### Custom battery gauge
 
