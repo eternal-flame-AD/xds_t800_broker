@@ -41,9 +41,11 @@ void k_sys_fatal_error_handler(unsigned int reason,
 int watchdog_init(void) {
   int err = hwinfo_get_reset_cause(&reset_reason);
   if (err == 0) {
+#if !IS_ENABLED(CONFIG_RESET_ON_FATAL_ERROR)
     if (reset_reason & (RESET_WATCHDOG | RESET_CPU_LOCKUP)) {
       bootloader_enter();
     }
+#endif
     hwinfo_clear_reset_cause();
   }
 

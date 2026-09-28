@@ -259,23 +259,19 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
 
   int16_t internal_calibration_data = 0;
   int8_t temp = INT8_MAX;
-  uint16_t weight = UINT16_MAX;
+  int16_t weight = 0;
 
   if (err == 0 && length >= 5) {
     // report zero offset
     uint8_t *incoming = (uint8_t *)data;
     temp = incoming[0];
     internal_calibration_data = incoming[1] | (incoming[2] << 8);
-    weight = incoming[3] | (incoming[4] << 8);
-    char sign = '+';
-    if (weight & 0x8000) {
-      sign = '-';
-      weight = ~weight + 1;
-    }
+    uint16_t weight_raw = incoming[3] | (incoming[4] << 8);
+    weight = (int16_t)weight_raw;
     ant_environ_temp_set(&environ, temp);
 
-    LOG_INF("temp=%d, adj=%d, force=%c%d.%dkgF", temp,
-            internal_calibration_data, sign, weight / 10, weight % 10);
+    LOG_DBG("temp=%d, adj=%d, force=%dcgF", temp, internal_calibration_data,
+            weight);
   }
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
     ant_bike_power_calib_response(&bike_power, true, internal_calibration_data);
@@ -401,22 +397,30 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
                                        // cranks revolution supported
     out[1] = 0;
     memcpy(out + 2, incoming, 2);
-    uint16_t totPower = incoming[0] | (incoming[1] << 8); // total power (watts)
-    uint16_t leftPower = incoming[2] | (incoming[3] << 8); // left power (watts)
+    uint16_t totPower =
+        incoming[0] | ((uint16_t)incoming[1] << 8); // total power (watts)
+    uint16_t leftPower =
+        incoming[2] | ((uint16_t)incoming[3] << 8); // left power (watts)
     uint16_t rightPower =
-        incoming[4] | (incoming[5] << 8);               // right power (watts)
-    int16_t cadence = incoming[6] | (incoming[7] << 8); // cadence (rpm)
+        incoming[4] | ((uint16_t)incoming[5] << 8); // right power (watts)
+    int16_t cadence =
+        incoming[6] | ((uint16_t)incoming[7] << 8); // cadence (rpm)
     uint16_t angle =
         incoming[8] |
-        (incoming[9]
+        ((uint16_t)incoming[9]
          << 8); // crank angle (degrees, 0 = ready position right forward)
     uint8_t error = incoming[10];
     if (error != 0) {
       LOG_ERR("CPS CPM notify: packet contains error code: %d", error);
       return BT_GATT_ITER_CONTINUE;
     }
-    LOG_INF("%dW(%d+%d), %drpm, angle: %ddeg", totPower, leftPower, rightPower,
-            cadence, angle);
+    if (leftPower + rightPower != totPower) {
+      LOG_WRN(
+          "CPS CPM notify: incoherent power packet: %dW(%d+%d), %drpm, angle: "
+          "%ddeg",
+          totPower, leftPower, rightPower, cadence, angle);
+      return BT_GATT_ITER_CONTINUE;
+    }
     if (totPower > 0) {
       uint32_t balance = ((uint32_t)leftPower * 200 + totPower / 2) / totPower;
       out[4] = CLAMP(balance, 0, 200);

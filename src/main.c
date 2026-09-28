@@ -1023,7 +1023,7 @@ int main(void) {
   err = main_loop();
   if (err) {
     printk("Main loop failed (err %d)", err);
-    bootloader_enter();
+    k_panic();
     return err;
   }
   return 0;

@@ -153,10 +153,17 @@ static void encode_page82(const struct ant_bike_power_s *profile,
 
 void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
                                 struct ant_bike_power_s *profile) {
+
+  // track the number of times we've been preempted
+  // to avoid starving background pages
+  // we need at least one background page every 30 pages
+  static uint8_t preempted_count = 0;
+
   switch (p_ant_evt->event) {
   case EVENT_TX: {
 
     uint8_t output_payload[8];
+    preempted_count++;
 
     // if we have calibration response, encode and send without delay
     if (profile->calib_state == ANT_BIKE_POWER_CALIB_STATE_SUCCESSFUL ||
@@ -178,7 +185,6 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
     }
 
     // if we have new power data, encode and send without delay
-
     if (profile->update_event_count != profile->last_update_event_count) {
       if (0 == k_mutex_lock(&profile->update_mutex, K_NO_WAIT)) {
         encode_page16_cache(profile);
@@ -203,7 +209,8 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
     }
 
     // rebroadcast one frame to ensure reception
-    if (profile->page16_rebroadcast_ctr > 0) {
+    // if the scheduling pressure is low
+    if (preempted_count < 20 && profile->page16_rebroadcast_ctr > 0) {
       if (0 == k_mutex_lock(&profile->update_mutex, K_NO_WAIT)) {
         profile->page16_rebroadcast_ctr--;
         ant_broadcast_message_tx(p_ant_evt->channel,
@@ -215,6 +222,7 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
     }
 
     // otherwise, send one of the background pages
+    preempted_count = 0;
 
     // if battery voltage is valid, send it with 50 probability
     if (profile->battery_state != ANT_BATTERY_STATUS_INVALID && page_ctr % 2) {
@@ -249,7 +257,7 @@ void ant_bike_power_evt_handler(ant_evt_t *p_ant_evt,
           // invalid per spec, ignore
           return;
         }
-        // 5 seconds max @ 4Hz
+        // 5 seconds max @ 4Hz, do not honor requests longer than that
         ctr = MIN(ctr, 4 * 5);
         if (batt_idx == BATT_IDX_REMOTE || batt_idx == BATT_IDX_SELF) {
           profile->battery_request_idx = batt_idx;
