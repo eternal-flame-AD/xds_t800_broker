@@ -1,9 +1,9 @@
 #include "gatt_system_info.h"
 
 #include "gatt_callbacks.h"
-#include "zephyr/bluetooth/uuid.h"
-#include "zephyr/devicetree.h"
-#include "zephyr/sys/byteorder.h"
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/sys/byteorder.h>
 
 #include <debug/cpu_load.h>
 #include <zephyr/device.h>

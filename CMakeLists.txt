@@ -61,7 +61,6 @@ target_sources(app PRIVATE
   src/advertiser.c
   src/gatt_callbacks.c
   src/gatt_battery.c
-  src/gatt_system_info.c
   src/shell_flush.c
   src/shell_bt.c
   src/shell_poweroff.c
@@ -72,6 +71,10 @@ target_sources(app PRIVATE
   src/crank_sim.c
   src/cdc_acm_serial.c
   src/main.c
+)
+
+target_sources_ifdef(CONFIG_GATT_SYSTEM_INFO app PRIVATE
+  src/gatt_system_info.c
 )
 
 target_sources_ifdef(CONFIG_ANT app PRIVATE

@@ -965,7 +965,9 @@ int main_loop(void) {
     return err;
   }
 
+#if IS_ENABLED(CONFIG_GATT_SYSTEM_INFO)
   gatt_sys_info_init();
+#endif
 
   led_set_bit(POWER_LED_BIT);
 
