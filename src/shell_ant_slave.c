@@ -25,21 +25,21 @@ static int antplus_generic_slave_cmd_handler(const struct shell *sh,
 
   for (size_t i = 0; i < ARRAY_SIZE(channel_names); i++) {
     uint8_t status;
-    shell_print(sh, "Contigured Device Number: %d",
+    shell_print(sh, "Configured Device Number: %d",
                 channel_names[i].config->device_number);
-    shell_print(sh, "Contigured Device Type: %d",
+    shell_print(sh, "Configured Device Type: %d",
                 channel_names[i].config->device_type);
-    shell_print(sh, "Contigured Transmit Type: %d",
+    shell_print(sh, "Configured Transmit Type: %d",
                 channel_names[i].config->transmission_type);
-    shell_print(sh, "Contigured Channel Period: %d",
+    shell_print(sh, "Configured Channel Period: %d",
                 channel_names[i].config->channel_period);
-    shell_print(sh, "Contigured Network Number: %d",
+    shell_print(sh, "Configured Network Number: %d",
                 channel_names[i].config->network_number);
-    shell_print(sh, "Contigured Channel Number: %d",
+    shell_print(sh, "Configured Channel Number: %d",
                 channel_names[i].config->channel_number);
-    shell_print(sh, "Contigured Channel Type: %d",
+    shell_print(sh, "Configured Channel Type: %d",
                 channel_names[i].config->channel_type);
-    shell_print(sh, "Contigured Ext Assign: %d",
+    shell_print(sh, "Configured Ext Assign: %d",
                 channel_names[i].config->ext_assign);
     if (ant_channel_status_get(channel_names[i].config->channel_number,
                                &status) != 0) {

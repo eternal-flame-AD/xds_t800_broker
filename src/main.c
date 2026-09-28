@@ -357,7 +357,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     return;
   }
 
-  if (rssi < -75) {
+  if (rssi < CONFIG_PROXIMITY_PAIR_RSSI) {
     // ignore too weak signal
     return;
   }
@@ -557,9 +557,6 @@ const struct bt_gatt_dm_cb discovery_cb = {
     .service_not_found = discovery_not_found_cb,
     .error_found = discovery_error_found_cb};
 
-const struct bt_uuid *discovery_services[] = {BT_UUID_MESH_PROXY, BT_UUID_BAS,
-                                              NULL};
-
 static void auth_cancel(struct bt_conn *conn) {
   char addr[BT_ADDR_LE_STR_LEN];
 
@@ -625,6 +622,12 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
 
   bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
+  struct bt_conn_info conn_info = {0};
+  err = bt_conn_get_info(conn, &conn_info);
+  if (err) {
+    LOG_ERR("bt_conn_info() returned %d", err);
+  }
+
   struct central_profile_instance *instance =
       central_profile_instance_get(conn);
 
@@ -632,7 +635,10 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
     LOG_ERR("Failed to connect to %s, 0x%02x %s", addr, conn_err,
             bt_hci_err_to_str(conn_err));
 
-    if (++connection_attempt_count > CONNECTION_ATTEMPT_LIMIT) {
+    // do not count connection attempts for peripheral connections
+    // (such as a computer being barely in range)
+    if (conn_info.role != BT_CONN_ROLE_PERIPHERAL &&
+        ++connection_attempt_count > CONNECTION_ATTEMPT_LIMIT) {
       LOG_ERR("Connection attempt limit reached, resetting");
       sys_reboot(SYS_REBOOT_COLD);
     }
@@ -645,12 +651,6 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
     bt_conn_unref(conn);
 
     return;
-  }
-
-  struct bt_conn_info conn_info = {0};
-  err = bt_conn_get_info(conn, &conn_info);
-  if (err) {
-    LOG_ERR("bt_conn_info() returned %d", err);
   }
 
   LOG_INF("Connected: %s", addr);
