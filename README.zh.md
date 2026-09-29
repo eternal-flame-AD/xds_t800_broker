@@ -39,10 +39,15 @@
 
 ## 功耗
 
+以下数值假设典型工作条件：
+
+- 使用默认的 50% LED 亮度。
+- T-800 传感器已配对并持久化保存在 Flash 中。
+
 | 状态 | 功耗 | |
 | --- | --- | ---|
-| 已连接 (LED 調暗 4%) | 约 4 mW | ![连接时功耗](assets/power_connected.png) |
-| 低功耗搜索 | 约 5 mW | ![断开时功耗](assets/power_disconnected.png) |
+| 已连接 | 约 6.4 mW | ![连接时功耗](assets/power_connected.png) |
+| 低功耗搜索 | 约 3.7 mW | ![断开时功耗](assets/power_disconnected.png) |
 
 ### 自定义电池电量计
 
