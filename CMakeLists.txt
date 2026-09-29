@@ -57,9 +57,16 @@ endif()
 execute_process(COMMAND git rev-parse --short HEAD OUTPUT_VARIABLE _git_commit ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
 target_compile_definitions(app PUBLIC "-DGIT_COMMIT=\"${_git_commit}\"")
 
+zephyr_iterable_section(NAME central_profile_instance GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT})
+zephyr_linker_sources(DATA_SECTIONS iterables.ld)
+
+list(APPEND CENTRAL_SOURCES
+  src/central_t800.c
+)
+
 # NORDIC SDK APP START
 target_sources(app PRIVATE
-  src/central_t800.c
+  src/central_profile.c
   src/leds.c
   src/advertiser.c
   src/gatt_callbacks.c
@@ -75,6 +82,7 @@ target_sources(app PRIVATE
   src/crank_sim.c
   src/cdc_acm_serial.c
   src/main.c
+  ${CENTRAL_SOURCES}
 )
 
 target_sources_ifdef(CONFIG_GATT_SYSTEM_INFO app PRIVATE

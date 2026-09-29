@@ -81,31 +81,11 @@ static bool low_power = false;
 
 static int scan_start();
 
-struct central_profile_instance {
-  const struct central_profile *profile;
-  bt_addr_le_t known_peer;
-  uint8_t led_idx;
-  struct bt_conn *conn;
-  const struct bt_uuid *const *next_service_uuid;
-  bool is_registered;
-};
-
 struct scan_ad_data {
   bt_addr_le_t peer;
   char name[32];
   const struct bt_uuid *uuids[16];
   uint8_t uuids_count;
-};
-
-static struct central_profile_instance central_profile_instances[] = {
-    {
-        .profile = &central_t800_profile,
-        .led_idx = CENTRAL1_CON_STATUS_LED_BIT,
-        .known_peer = {0},
-        .conn = NULL,
-        .next_service_uuid = NULL,
-        .is_registered = false,
-    },
 };
 
 static void
@@ -145,37 +125,35 @@ static void bt_conn_foreach_count_connected_peripheral(struct bt_conn *conn,
 
 static bool is_central_slot_open(void) {
   uint32_t count = 0;
+  uint32_t profile_count = 0;
   bt_conn_foreach(BT_CONN_TYPE_LE, bt_conn_foreach_count_connected_peripheral,
                   &count);
-  return count < ARRAY_SIZE(central_profile_instances);
+  STRUCT_SECTION_COUNT(central_profile_instance, &profile_count);
+  return count < profile_count;
 }
 
 static int bt_central_known_peer_set(const char *name, size_t len,
                                      settings_read_cb read_cb, void *cb_arg) {
   LOG_INF("bt_central_known_peer_set: %s", name);
   char addr_str[BT_ADDR_LE_STR_LEN] = {0};
-  for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
+  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
     // skip if not the same profile
-    if (strcmp(name, central_profile_instances[i].profile->name) != 0) {
-      continue;
-    }
+    if (strcmp(name, instance->profile->name) == 0) {
+      int rc =
+          read_cb(cb_arg, &instance->known_peer, sizeof(instance->known_peer));
+      if (rc == sizeof(instance->known_peer)) {
+        bt_addr_le_to_str(&instance->known_peer, addr_str, sizeof(addr_str));
+        LOG_INF("Known peer restored for profile: %s (%s)",
+                instance->profile->name, addr_str);
+        return 0;
+      }
+      LOG_WRN("Unexpected retrieved value length: %d. Profile %s will run in "
+              "pairing mode.",
+              rc, instance->profile->name);
 
-    int rc = read_cb(cb_arg, &central_profile_instances[i].known_peer,
-                     sizeof(central_profile_instances[i].known_peer));
-    if (rc == sizeof(central_profile_instances[i].known_peer)) {
-      bt_addr_le_to_str(&central_profile_instances[i].known_peer, addr_str,
-                        sizeof(addr_str));
-      LOG_INF("Known peer restored for profile: %s (%s)",
-              central_profile_instances[i].profile->name, addr_str);
-      return 0;
+      memset(&instance->known_peer, 0, sizeof(instance->known_peer));
+      return rc;
     }
-    LOG_WRN("Unexpected retrieved value length: %d. Profile %s will run in "
-            "pairing mode.",
-            rc, central_profile_instances[i].profile->name);
-
-    memset(&central_profile_instances[i].known_peer, 0,
-           sizeof(central_profile_instances[i].known_peer));
-    return rc;
   }
   return -ENOENT;
 }
@@ -186,9 +164,9 @@ SETTINGS_STATIC_HANDLER_DEFINE(known_peer,
 
 static struct central_profile_instance *
 central_profile_instance_get(struct bt_conn *conn) {
-  for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
-    if (central_profile_instances[i].conn == conn) {
-      return &central_profile_instances[i];
+  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
+    if (instance->conn == conn) {
+      return instance;
     }
   }
   return NULL;
@@ -213,8 +191,8 @@ int64_t last_button_press_time = 0;
 
 static void start_pairing_mode_work_handler(struct k_work *work) {
   LOG_INF("Long press detected, entering pairing mode");
-  for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
-    bt_addr_le_copy(&central_profile_instances[i].known_peer, BT_ADDR_LE_ANY);
+  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
+    bt_addr_le_copy(&instance->known_peer, BT_ADDR_LE_ANY);
   }
   bt_le_scan_stop();
   bt_conn_foreach(BT_CONN_TYPE_LE,
@@ -273,9 +251,9 @@ bool scan_ad_data_callback(struct bt_data *data, void *context) {
     for (size_t i = 0; i < data->data_len; i += 2) {
       uint16_t uuid = data->data[i] | (data->data[i + 1] << 8);
 
-      for (size_t j = 0; j < ARRAY_SIZE(central_profile_instances); j++) {
+      STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
         for (const struct bt_uuid *const *target_uuid =
-                 central_profile_instances[j].profile->service_uuids;
+                 instance->profile->service_uuids;
              *target_uuid != NULL; target_uuid++) {
           if ((*target_uuid)->type != BT_UUID_TYPE_16) {
             continue;
@@ -296,9 +274,9 @@ bool scan_ad_data_callback(struct bt_data *data, void *context) {
       return false;
     }
     for (size_t i = 0; i < data->data_len; i += 16) {
-      for (size_t j = 0; j < ARRAY_SIZE(central_profile_instances); j++) {
+      STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
         for (const struct bt_uuid *const *target_uuid =
-                 central_profile_instances[j].profile->service_uuids;
+                 instance->profile->service_uuids;
              *target_uuid != NULL; target_uuid++) {
           if ((*target_uuid)->type != BT_UUID_TYPE_128) {
             continue;
@@ -330,16 +308,15 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
   }
 
   bool all_known = true;
-  for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
-    if (bt_addr_le_eq(&central_profile_instances[i].known_peer, addr)) {
-      LOG_INF("Known peer found: %s",
-              central_profile_instances[i].profile->name);
+  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
+    if (bt_addr_le_eq(&instance->known_peer, addr)) {
+      LOG_INF("Known peer found: %s", instance->profile->name);
 
       bt_le_scan_stop();
       int err = bt_conn_le_create(
           addr, CONN_CREATE_PARAMS,
           BT_LE_CONN_PARAM(60, 100, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2500)),
-          &central_profile_instances[i].conn);
+          &instance->conn);
 
       if (err) {
         LOG_ERR("Failed to create connection (err %d)", err);
@@ -347,8 +324,8 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
 
       return;
     }
-    if (memcmp(&central_profile_instances[i].known_peer, BT_ADDR_LE_ANY,
-               sizeof(bt_addr_le_t)) == 0) {
+    if (memcmp(&instance->known_peer, BT_ADDR_LE_ANY, sizeof(bt_addr_le_t)) ==
+        0) {
       all_known = false;
     }
   }
@@ -374,19 +351,17 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
   }
 
   // find matching profile
-  for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
-    if (central_profile_instances[i].conn != NULL) {
+  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
+    if (instance->conn != NULL) {
       continue;
     }
 
-    if (central_profile_instances[i].profile->device_name_prefix != NULL) {
-      size_t len =
-          strlen(central_profile_instances[i].profile->device_name_prefix);
+    if (instance->profile->device_name_prefix != NULL) {
+      size_t len = strlen(instance->profile->device_name_prefix);
       if (strlen(scan_ad_data.name) < len) {
         continue;
       }
-      if (memcmp(scan_ad_data.name,
-                 central_profile_instances[i].profile->device_name_prefix,
+      if (memcmp(scan_ad_data.name, instance->profile->device_name_prefix,
                  len) != 0) {
         continue;
       }
@@ -394,7 +369,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     bool matches = true;
 
     for (const struct bt_uuid *const *target_uuid =
-             central_profile_instances[i].profile->service_uuids;
+             instance->profile->service_uuids;
          *target_uuid != NULL; target_uuid++) {
       bool found = false;
       for (size_t j = 0; j < scan_ad_data.uuids_count; j++) {
@@ -409,14 +384,13 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
       }
     }
     if (matches) {
-      LOG_INF("Matching profile found: %s",
-              central_profile_instances[i].profile->name);
+      LOG_INF("Matching profile found: %s", instance->profile->name);
 
       bt_le_scan_stop();
       int err = bt_conn_le_create(
           addr, CONN_CREATE_PARAMS,
           BT_LE_CONN_PARAM(80, 120, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2000)),
-          &central_profile_instances[i].conn);
+          &instance->conn);
 
       if (err) {
         LOG_ERR("Failed to create connection (err %d)", err);
@@ -437,14 +411,13 @@ static int scan_start() {
 
   bool all_known = true;
   bool fal_configured = true;
-  for (size_t i = 0; i < ARRAY_SIZE(central_profile_instances); i++) {
-    if (memcmp(&central_profile_instances[i].known_peer, BT_ADDR_LE_ANY,
-               sizeof(bt_addr_le_t)) == 0) {
+  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
+    if (memcmp(&instance->known_peer, BT_ADDR_LE_ANY, sizeof(bt_addr_le_t)) ==
+        0) {
       all_known = false;
       break;
     }
-    err =
-        bt_le_filter_accept_list_add(&central_profile_instances[i].known_peer);
+    err = bt_le_filter_accept_list_add(&instance->known_peer);
     if (err) {
       LOG_WRN("Failed to add known peer to filter accept list (err %d)", err);
       fal_configured = false;

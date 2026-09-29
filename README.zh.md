@@ -190,27 +190,9 @@ Zephyr shell 可通过控制台 UART（Dongle 上为 USB CDC ACM）访问，绑�
 
 T-800 功率计是一个不限制中央设备地址的外设，任何 central 都能连接，因此 central 角色的地址通常无关紧要。`CONFIG_BT_PRIVACY=y`（默认值）会让转发器在作为 central 时使用随机可解析地址。只有当你添加第二个 BLE central 配置文件，且目标设备在意或会过滤 central 地址时，才需要考虑这一点；禁用该选项需要在 `local.conf` 中设置 `CONFIG_BT_PRIVACY=n`，但这同时也会禁用私密广播。
 
-`src/central_profile.h` 中定义的配置文件如下：
+项目可以同时追踪电变等其他需要转发的传感器。第三方插件可以根据 `src/central_profile.h` 中的定义，使用 `REGISTER_CENTRAL_PROFILE(name, &val)` 注册，最终使用 `-DCENTRAL_SOURCES` 加入构建。
 
-```c
-struct central_profile {
-  const char *name;
-  const char *device_name_prefix;
-
-  /* 发现服务时调用。 */
-  int (*on_discovery)(struct bt_gatt_dm *dm);
-
-  /* 整个连接建立完成后调用。 */
-  void (*on_connected)(struct bt_conn *conn);
-
-  /* central 断开连接时调用。 */
-  void (*on_disconnected)(struct bt_conn *conn, uint8_t reason);
-
-  const struct bt_uuid *service_uuids[];
-};
-```
-
-T-800 的实现位于 `src/central_t800.c`，并通过 `src/central_t800.h` 导出 `central_t800_profile`。该配置文件在 `src/main.c` 中注册。
+T-800 的实现位于 `src/central_t800.c`。
 
 主循环会扫描广播中包含 `service_uuids` 所有 UUID 且设备名称以 `device_name_prefix` 开头的外设。匹配后，转发器连接、发现列出的服务，并对每个服务调用 `on_discovery`。所有服务发现完成后调用 `on_connected`。对端地址会持久化到 settings 中，以便后续启动时快速重连。
 

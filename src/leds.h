@@ -2,10 +2,11 @@
 
 #include <zephyr/kernel.h>
 
-#define POWER_LED_BIT 0
-#define CENTRAL1_CON_STATUS_LED_BIT 1
-#define CENTRAL2_CONN_STATUS_LED_BIT 2
-#define DATA_ACTIVITY_LED_BIT 3
+#define NULL_LED_BIT 0
+#define POWER_LED_BIT 1
+#define CENTRAL1_CONN_STATUS_LED_BIT 2
+#define CENTRAL2_CONN_STATUS_LED_BIT 3
+#define DATA_ACTIVITY_LED_BIT 4
 
 void led_brightness_next(void);
 

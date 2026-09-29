@@ -91,7 +91,7 @@ static void refresh_leds(void) {
 
   dimmable_led_set(&power_led, brightness, (val & (1 << POWER_LED_BIT)));
   dimmable_led_set(&central1_led_dev, brightness,
-                   (val & (1 << CENTRAL1_CON_STATUS_LED_BIT)));
+                   (val & (1 << CENTRAL1_CONN_STATUS_LED_BIT)));
   dimmable_led_set(&central2_led_dev, brightness,
                    (val & (1 << CENTRAL2_CONN_STATUS_LED_BIT)));
   // invert data activity led if power led is not present
@@ -121,11 +121,17 @@ void led_data_activity(void) {
 }
 
 void led_set_bit(uint8_t bit) {
+  if (bit == NULL_LED_BIT) {
+    return;
+  }
   atomic_fetch_or(&led_state, 1 << bit);
   refresh_leds();
 }
 
 void led_clear_bit(uint8_t bit) {
+  if (bit == NULL_LED_BIT) {
+    return;
+  }
   atomic_fetch_and(&led_state, ~(1 << bit));
   refresh_leds();
 }
@@ -165,7 +171,6 @@ static int leds_cmd_handler(const struct shell *shell, size_t argc,
   uint8_t val = atomic_load(&led_state);
   uint8_t idx = brightness_index;
   uint8_t brightness = brightness_options[idx];
-  const char *yes_no[] = {"no", "yes"};
   struct led_and_name {
     const struct dimmable_led *led;
     const char *name;
@@ -173,16 +178,15 @@ static int leds_cmd_handler(const struct shell *shell, size_t argc,
   };
   struct led_and_name leds[] = {
       {&power_led, "Power", POWER_LED_BIT},
-      {&central1_led_dev, "Central1", CENTRAL1_CON_STATUS_LED_BIT},
+      {&central1_led_dev, "Central1", CENTRAL1_CONN_STATUS_LED_BIT},
       {&central2_led_dev, "Central2", CENTRAL2_CONN_STATUS_LED_BIT},
       {&data_activity_led_dev, "Data activity", DATA_ACTIVITY_LED_BIT},
   };
   shell_print(shell, "Brightness: %d (#%d)", brightness, idx);
   for (size_t i = 0; i < ARRAY_SIZE(leds); i++) {
-    shell_print(shell, "%s led: valid: %s, dimmable: %s, active: %s",
-                leds[i].name, yes_no[leds[i].led->valid],
-                yes_no[leds[i].led->is_pwm_led],
-                yes_no[(val & (1 << leds[i].bit))]);
+    shell_print(shell, "%s led: valid: %d, dimmable: %d, active: %d",
+                leds[i].name, leds[i].led->valid, leds[i].led->is_pwm_led,
+                (val & (1 << leds[i].bit)) ? 1 : 0);
   }
   return 0;
 }

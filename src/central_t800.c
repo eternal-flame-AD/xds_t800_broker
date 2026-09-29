@@ -1,4 +1,5 @@
 #include "central_t800.h"
+#include "central_profile.h"
 
 #include <stdalign.h>
 #include <stdatomic.h>
@@ -349,7 +350,6 @@ bt_gatt_notify_func_bas_battery_level(struct bt_conn *conn,
       ant_bike_power_set_battery_state(&bike_power, new_battery_level);
 #endif
       bas_battery_level_set(new_battery_level);
-      LOG_INF("Battery level: %d", new_battery_level);
     }
   }
   return BT_GATT_ITER_CONTINUE;
@@ -697,7 +697,7 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   }
 }
 
-const struct central_profile central_t800_profile = {
+const static struct central_profile central_t800_profile = {
     .name = "T800",
     .device_name_prefix = "XDS-A001-",
 
@@ -707,3 +707,5 @@ const struct central_profile central_t800_profile = {
 
     .service_uuids = {BT_UUID_DIS, BT_UUID_MESH_PROXY, BT_UUID_BAS, NULL},
 };
+
+REGISTER_CENTRAL_PROFILE(t800, &central_t800_profile);

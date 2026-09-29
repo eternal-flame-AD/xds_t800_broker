@@ -231,29 +231,9 @@ central profile whose target device cares about or filters the central address;
 disabling it requires setting `CONFIG_BT_PRIVACY=n`, which also disables private
 advertising.
 
-A profile is defined in `src/central_profile.h`:
+Third party profiles like electronic deraileurs can be defined according to `src/central_profile.h`, registered using `REGISTER_CENTRAL_PROFILE(name, &val)`, and added to the build using `-DCENTRAL_SOURCES`:
 
-```c
-struct central_profile {
-  const char *name;
-  const char *device_name_prefix;
-
-  /* Called when a service is found during discovery. */
-  int (*on_discovery)(struct bt_gatt_dm *dm);
-
-  /* Called after the whole connection is up. */
-  void (*on_connected)(struct bt_conn *conn);
-
-  /* Called when the central disconnects. */
-  void (*on_disconnected)(struct bt_conn *conn, uint8_t reason);
-
-  const struct bt_uuid *service_uuids[];
-};
-```
-
-The T-800 implementation is in `src/central_t800.c` and exported as
-`central_t800_profile` in `src/central_t800.h`. It is registered in
-`src/main.c`.
+The T-800 implementation is in `src/central_t800.c`.
 
 The main loop scans for peripherals that advertise all of the UUIDs
 listed in `service_uuids` and whose device name starts with
