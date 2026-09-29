@@ -6,6 +6,10 @@ Wireless broker for the XDS (Branta) T-800 bike power meter. It relays the
 proprietary T-800 payload over both ANT+ and the standard Bluetooth Cycling Power
 Measurement Service so that regular head units can read it.
 
+| Device Information  | Calibration | Battery Info |
+| --- | --- | --- |
+| ![Device Information](assets/screenshot_dis.jpg) | ![Calibration](assets/screenshot_calibration.jpg) | ![Battery Info](assets/screenshot_battery.jpg) |
+
 ## Features
 
 - Low power consumption suitable for touring (~5mW excluding LED).
@@ -76,7 +80,7 @@ touch the fixed feature list:
   edit this.
 - `prj_ant.conf` - Required feature selections to enable ANT+ support.
 - `Kconfig.defconfig` — Factory defaults for upstream Kconfig symbols such as the
-  Bluetooth device name and Device Information Service strings.
+  Bluetooth device name.
 - `local.conf` — Per-build local overrides. Most users can simply leave this empty.
 
 Any file matching `*.local.conf` or `local.conf` is ignored by git, so you can
@@ -144,7 +148,7 @@ until the blue light flashes briefly.
 This clears the stored sensor peer for this boot and lets the broker find and persist a new sensor in close proximity.
 
 You can verify the connection via the LED on the meter turning solid green, and
-the serial number showing on your ANT+ head unit matching the last four digits
+the serial number showing on your head unit matching the last four digits
 shown on your XDS Ride App.
 
 Note: you need to connect to the sensor first before pairing the broker to your head unit.

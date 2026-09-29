@@ -4,6 +4,10 @@
 
 喜德盛（Branta）T-800 自行车功率计的无线转发器。它把 T-800 的专有数据包同时转发到 ANT+ 和标准的蓝牙骑行功率测量服务（Cycling Power Measurement Service），让普通码表都能读取。
 
+| 设备信息  | 校准 | 电池信息 |
+| --- | --- | --- |
+| ![设备信息](assets/screenshot_dis.jpg) | ![校准](assets/screenshot_calibration.jpg) | ![电池信息](assets/screenshot_battery.jpg) |
+
 ## 功能特性
 
 - 低功耗，适合长途骑行（约 5 mW，不含LED）。
@@ -70,7 +74,7 @@
 
 - `prj.conf` — 必需的子系统和功能选择。通常不需要手动修改。
 - `prj_ant.conf` — 启用 ANT+ 必需的子系统和功能选择。
-- `Kconfig.defconfig` — 上游 Kconfig 符号的出厂默认值，例如蓝牙设备名称和设备信息服务字符串。
+- `Kconfig.defconfig` — 上游 Kconfig 符号的出厂默认值，例如蓝牙设备名称。
 - `local.conf` — 每次构建时的本地覆盖。大多数用户可以直接留空。
 
 所有匹配 `*.local.conf` 或 `local.conf` 的文件都会被 git 忽略，因此你可以把部署相关的覆盖项排除在版本控制之外。
@@ -129,7 +133,7 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 出厂系统自动进入配对模式。要连接新的 T-800 传感器，请长按 Dongle 按钮。保持按住 3 秒左右直到蓝色指示灯短暂闪烁。这会清除本次启动时读取的已有传感器配对信息，并让转发器在近距离内发现并保存新的传感器。
 
-连接成功后，可以通过以下方式确认：功率计上的指示灯变为常亮绿色，并且 ANT+ 码表上显示的序列号后四位与 XDS Ride App 中显示的后四位一致。
+连接成功后，可以通过以下方式确认：功率计上的指示灯变为常亮绿色，并且码表上显示的序列号后四位与 XDS Ride App 中显示的后四位一致。
 
 注意：需先连接传感器，然后配对码表。传感器未连接时 ANT+ 不会激活。
 

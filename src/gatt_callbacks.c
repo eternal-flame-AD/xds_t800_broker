@@ -32,3 +32,12 @@ ssize_t gatt_read_u32_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
   uint32_t val = sys_cpu_to_le32(*(uint32_t *)attr->user_data);
   return bt_gatt_attr_read(conn, attr, buf, len, offset, &val, sizeof(val));
 }
+
+ssize_t gatt_read_cstr_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                          void *buf, uint16_t len, uint16_t offset) {
+  const char *val = (const char *)attr->user_data;
+  if (!val) {
+    val = "";
+  }
+  return bt_gatt_attr_read(conn, attr, buf, len, offset, val, strlen(val));
+}

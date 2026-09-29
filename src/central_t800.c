@@ -4,7 +4,9 @@
 #include <stdatomic.h>
 #include <sys/errno.h>
 #include <sys/types.h>
+#include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 
@@ -17,9 +19,8 @@
 #include "crank_sim.h"
 #include "gatt_battery.h"
 #include "gatt_callbacks.h"
+#include "gatt_dis.h"
 #include "leds.h"
-#include "zephyr/bluetooth/gatt.h"
-#include "zephyr/kernel.h"
 
 #define STUCK_SENSOR_TIMER_INTERVAL_MS 500
 #define STUCK_SENSOR_REBOOT_TIMEOUT_MS 15000
@@ -108,6 +109,8 @@ static uint8_t read_dis_serial_number_cb(struct bt_conn *conn, uint8_t err,
     return BT_GATT_ITER_STOP;
   }
   uint8_t *incoming = (uint8_t *)data;
+  dis_set_serial_number(incoming, length);
+
   // walk backwards and collect up to 8 numbers
   char number_buffer[8] = {0};
   uint8_t number_count = 0;
@@ -137,10 +140,29 @@ static uint8_t read_dis_serial_number_cb(struct bt_conn *conn, uint8_t err,
   return BT_GATT_ITER_STOP;
 }
 
-static struct bt_gatt_read_params dis_read_params = {
+static uint8_t read_dis_software_revision_cb(struct bt_conn *conn, uint8_t err,
+                                             struct bt_gatt_read_params *params,
+                                             const void *data,
+                                             uint16_t length) {
+  if (err != 0) {
+    LOG_WRN("Read DIS software revision failed: %d", err);
+    return BT_GATT_ITER_STOP;
+  }
+  uint8_t *incoming = (uint8_t *)data;
+  dis_set_software_revision(incoming, length);
+  return BT_GATT_ITER_STOP;
+}
+
+static struct bt_gatt_read_params dis_serial_number_read_params = {
     .handle_count = 1,
     .single = {0},
     .func = read_dis_serial_number_cb,
+};
+
+static struct bt_gatt_read_params dis_software_revision_read_params = {
+    .handle_count = 1,
+    .single = {0},
+    .func = read_dis_software_revision_cb,
 };
 
 static struct bt_gatt_read_params internals_read_params = {
@@ -504,12 +526,22 @@ static int on_discovery(struct bt_gatt_dm *dm) {
     if (!attr_dis_serial_number) {
       LOG_WRN("DIS serial number characteristic not found");
     } else {
-      dis_read_params.single.handle =
+      dis_serial_number_read_params.single.handle =
           bt_gatt_dm_attr_chrc_val(attr_dis_serial_number)->value_handle;
-      err = bt_gatt_read(conn, &dis_read_params);
+      err = bt_gatt_read(conn, &dis_serial_number_read_params);
       if (err) {
         LOG_WRN("Failed to read DIS serial number: %d", err);
       }
+    }
+
+    const struct bt_gatt_dm_attr *attr_dis_software_revision =
+        bt_gatt_dm_char_by_uuid(dm, BT_UUID_DIS_SOFTWARE_REVISION);
+    if (!attr_dis_software_revision) {
+      LOG_WRN("DIS software revision characteristic not found");
+    } else {
+      dis_software_revision_read_params.single.handle =
+          bt_gatt_dm_attr_chrc_val(attr_dis_software_revision)->value_handle;
+      err = bt_gatt_read(conn, &dis_software_revision_read_params);
     }
 
   } else if (0 == bt_uuid_cmp(service_val->uuid, BT_UUID_MESH_PROXY)) {

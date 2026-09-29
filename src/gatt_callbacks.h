@@ -11,3 +11,5 @@ ssize_t gatt_read_u8_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                         void *buf, uint16_t len, uint16_t offset);
 ssize_t gatt_read_u32_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                          void *buf, uint16_t len, uint16_t offset);
+ssize_t gatt_read_cstr_cb(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                          void *buf, uint16_t len, uint16_t offset);

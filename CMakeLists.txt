@@ -54,6 +54,9 @@ if(HAVE_TYPEOF)
   target_compile_definitions(app PRIVATE HAVE_TYPEOF)
 endif()
 
+execute_process(COMMAND git rev-parse --short HEAD OUTPUT_VARIABLE _git_commit ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+target_compile_definitions(app PUBLIC "-DGIT_COMMIT=\"${_git_commit}\"")
+
 # NORDIC SDK APP START
 target_sources(app PRIVATE
   src/central_t800.c
@@ -61,6 +64,7 @@ target_sources(app PRIVATE
   src/advertiser.c
   src/gatt_callbacks.c
   src/gatt_battery.c
+  src/gatt_dis.c
   src/shell_flush.c
   src/shell_bt.c
   src/shell_poweroff.c
