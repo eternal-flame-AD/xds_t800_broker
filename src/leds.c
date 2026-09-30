@@ -20,7 +20,7 @@ const uint8_t brightness_options[] = {100, 75, 50, 4};
 
 static uint8_t brightness_index = 2;
 
-static bool temp_dim = false;
+static _Atomic int8_t temp_dim_block = 0;
 
 static _Atomic uint8_t led_state = 0;
 
@@ -84,7 +84,7 @@ static const struct dimmable_led power_led =
 
 static void refresh_leds(void) {
   uint8_t brightness = brightness_options[brightness_index];
-  if (temp_dim) {
+  if (0 == temp_dim_block) {
     brightness = MIN(brightness, 4);
   }
   uint8_t val = atomic_load(&led_state);
@@ -100,8 +100,17 @@ static void refresh_leds(void) {
       (((val & (1 << DATA_ACTIVITY_LED_BIT)) != 0) ^ !power_led.valid));
 }
 
-void led_set_temp_dim(bool dim) {
-  temp_dim = dim;
+void led_temp_dim_inc(void) {
+  atomic_fetch_add(&temp_dim_block, 1);
+  refresh_leds();
+}
+
+void led_temp_dim_dec(void) {
+  atomic_fetch_sub(&temp_dim_block, 1);
+  if (atomic_load(&temp_dim_block) < 0) {
+    LOG_WRN("Temp dim underflow, this is not supposed to happen");
+    atomic_store(&temp_dim_block, 0);
+  }
   refresh_leds();
 }
 
@@ -242,14 +251,18 @@ SETTINGS_STATIC_HANDLER_DEFINE(led, SETTINGS_LED_SUBTREE, NULL,
                                brightness_settings_set, NULL, NULL);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(led_brightness_sub,
-                               SHELL_CMD(save, NULL, "Save default brightness",
-                                         brightness_save_cmd_handler),
-                               SHELL_CMD(next, NULL, "Next brightness",
-                                         brightness_next_cmd_handler));
+                               SHELL_CMD_ARG(save, NULL,
+                                             "Save default brightness",
+                                             brightness_save_cmd_handler, 1, 0),
+                               SHELL_CMD_ARG(next, NULL, "Next brightness",
+                                             brightness_next_cmd_handler, 1, 0),
+                               SHELL_SUBCMD_SET_END);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(led_sub,
-                               SHELL_CMD(brightness, &led_brightness_sub,
-                                         "Brightness command",
-                                         brightness_cmd_handler));
+                               SHELL_CMD_ARG(brightness, &led_brightness_sub,
+                                             SHELL_HELP("Brightness command",
+                                                        "[save|next]"),
+                                             brightness_cmd_handler, 1, 0),
+                               SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(led, &led_sub, "LED commands", leds_cmd_handler);

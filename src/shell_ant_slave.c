@@ -189,10 +189,13 @@ void ant_generic_slave_evt_handler(ant_evt_t *p_ant_evt) {
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
     ant_slave_cmds,
-    SHELL_CMD(start, NULL, "Start ANT+ Slave",
-              antplus_generic_slave_cmd_start_handler),
-    SHELL_CMD(stop, NULL, "Stop ANT+ Slave",
-              antplus_generic_slave_cmd_stop_handler),
+    SHELL_CMD_ARG(
+        start, NULL,
+        SHELL_HELP("Start ANT+ Slave",
+                   "<device_type> <channel_period> [<device_number>]"),
+        antplus_generic_slave_cmd_start_handler, 3, 1),
+    SHELL_CMD_ARG(stop, NULL, "Stop ANT+ Slave",
+                  antplus_generic_slave_cmd_stop_handler, 1, 0),
     SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(ant_slave, &ant_slave_cmds, "ANT+ Slave",

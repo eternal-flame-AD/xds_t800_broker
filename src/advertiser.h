@@ -9,7 +9,15 @@ enum advertiser_kind {
   ADVERTISER_KIND_COUNT = 2u,
 };
 
+void advertising_stop(void);
 void advertising_start(void);
+
+/**
+ * @brief Check if the advertiser is public
+ *
+ * @return true if the advertiser is public, false otherwise
+ */
+bool advertising_is_public(void);
 
 /**
  * @brief Set the device number

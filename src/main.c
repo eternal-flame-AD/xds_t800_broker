@@ -13,7 +13,6 @@
 #include <zephyr/bluetooth/assigned_numbers.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/services/bas.h>
@@ -32,22 +31,26 @@
 #include <dk_buttons_and_leds.h>
 
 #include "advertiser.h"
+#include "battery_gauge.h"
+#include "cac_acm_serial.h"
+#include "central_profile.h"
+#include "central_t800.h"
+#include "gatt_battery.h"
+#include "leds.h"
+#include "poweroff.h"
+#include "scanner.h"
+#include "watchdog.h"
+
+#if IS_ENABLED(CONFIG_GATT_SYSTEM_INFO)
+#include "gatt_system_info.h"
+#endif
+
 #if IS_ENABLED(CONFIG_ANT)
 #include "ant_init.h"
 #include "ant_parameters.h"
 #include "ant_profiles.h"
 #include "shell_ant_slave.h"
 #endif
-#include "battery_gauge.h"
-#include "bootloader.h"
-#include "cac_acm_serial.h"
-#include "central_profile.h"
-#include "central_t800.h"
-#include "gatt_battery.h"
-#include "gatt_system_info.h"
-#include "leds.h"
-#include "poweroff.h"
-#include "watchdog.h"
 
 #include "main.h"
 
@@ -59,11 +62,6 @@
 #define BT_CENTRAL_KNOWN_PEER_SETTINGS_SUBTREE "bt_central_known_peer"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
-
-#define CONN_CREATE_PARAMS                                                     \
-  BT_CONN_LE_CREATE_PARAM(BT_CONN_LE_OPT_NONE,                                 \
-                          (2 * BT_GAP_SCAN_FAST_INTERVAL),                     \
-                          BT_GAP_SCAN_FAST_WINDOW)
 
 #if DT_NODE_EXISTS(DT_NODELABEL(vccpoweroff)) &&                               \
     DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(vccpoweroff))
@@ -77,33 +75,6 @@ const struct led_dt_spec vcc_poweroff_pin =
 #endif
 
 static uint8_t connection_attempt_count = 0;
-static bool low_power = false;
-
-static int scan_start();
-
-struct scan_ad_data {
-  bt_addr_le_t peer;
-  char name[32];
-  const struct bt_uuid *uuids[16];
-  uint8_t uuids_count;
-};
-
-static void
-bt_conn_foreach_disconnect_connected_peripheral(struct bt_conn *conn,
-                                                void *data) {
-  struct bt_conn_info conn_info;
-
-  int err = bt_conn_get_info(conn, &conn_info);
-  if (err) {
-    LOG_ERR("Failed to get connection info (err %d)", err);
-  }
-  if (conn_info.type != BT_CONN_TYPE_LE ||
-      conn_info.state != BT_CONN_STATE_CONNECTED ||
-      conn_info.role != BT_CONN_ROLE_CENTRAL) {
-    return;
-  }
-  bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-}
 
 static void bt_conn_foreach_count_connected_peripheral(struct bt_conn *conn,
                                                        void *data) {
@@ -121,15 +92,6 @@ static void bt_conn_foreach_count_connected_peripheral(struct bt_conn *conn,
     return;
   }
   (*count)++;
-}
-
-static bool is_central_slot_open(void) {
-  uint32_t count = 0;
-  uint32_t profile_count = 0;
-  bt_conn_foreach(BT_CONN_TYPE_LE, bt_conn_foreach_count_connected_peripheral,
-                  &count);
-  STRUCT_SECTION_COUNT(central_profile_instance, &profile_count);
-  return count < profile_count;
 }
 
 static int bt_central_known_peer_set(const char *name, size_t len,
@@ -190,19 +152,7 @@ static struct bt_gatt_exchange_params mtu_exchange_params = {
 int64_t last_button_press_time = 0;
 
 static void start_pairing_mode_work_handler(struct k_work *work) {
-  LOG_INF("Long press detected, entering pairing mode");
-  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-    bt_addr_le_copy(&instance->known_peer, BT_ADDR_LE_ANY);
-  }
-  bt_le_scan_stop();
-  bt_conn_foreach(BT_CONN_TYPE_LE,
-                  bt_conn_foreach_disconnect_connected_peripheral, NULL);
-  low_power = false;
-  scan_start();
-  for (int i = 0; i < 5; i++) {
-    led_data_activity();
-    k_sleep(K_MSEC(500));
-  }
+  scan_enter_pairing_mode(NULL);
 }
 
 K_WORK_DELAYABLE_DEFINE(start_pairing_mode_work,
@@ -225,226 +175,6 @@ static void btn_handler_fn(uint32_t button_state, uint32_t has_changed) {
       }
     }
   }
-}
-
-bool scan_ad_data_callback(struct bt_data *data, void *context) {
-  struct scan_ad_data *scan_ad_data = (struct scan_ad_data *)context;
-  switch (data->type) {
-  case BT_DATA_NAME_COMPLETE:
-  case BT_DATA_NAME_SHORTENED:
-    if (data->data_len + 1 > sizeof(scan_ad_data->name)) {
-      LOG_ERR("Name too long: %d", data->data_len);
-      return false;
-    }
-    memcpy(scan_ad_data->name, data->data, data->data_len);
-    scan_ad_data->name[data->data_len] = '\0';
-    break;
-  case BT_DATA_UUID16_ALL:
-  case BT_DATA_UUID16_SOME:
-    if (scan_ad_data->uuids_count == ARRAY_SIZE(scan_ad_data->uuids)) {
-      return true;
-    }
-    if (data->data_len % 2 != 0) {
-      LOG_ERR("Invalid UUID16 data length: %d", data->data_len);
-      return false;
-    }
-    for (size_t i = 0; i < data->data_len; i += 2) {
-      uint16_t uuid = data->data[i] | (data->data[i + 1] << 8);
-
-      STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-        for (const struct bt_uuid *const *target_uuid =
-                 instance->profile->service_uuids;
-             *target_uuid != NULL; target_uuid++) {
-          if ((*target_uuid)->type != BT_UUID_TYPE_16) {
-            continue;
-          }
-          uint16_t target_uuid_value = BT_UUID_16(*target_uuid)->val;
-          if (target_uuid_value == uuid) {
-            scan_ad_data->uuids[scan_ad_data->uuids_count++] = *target_uuid;
-            continue;
-          }
-        }
-      }
-    }
-    break;
-  case BT_DATA_UUID128_ALL:
-  case BT_DATA_UUID128_SOME:
-    if (data->data_len % 16 != 0) {
-      LOG_ERR("Invalid UUID128 data length: %d", data->data_len);
-      return false;
-    }
-    for (size_t i = 0; i < data->data_len; i += 16) {
-      STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-        for (const struct bt_uuid *const *target_uuid =
-                 instance->profile->service_uuids;
-             *target_uuid != NULL; target_uuid++) {
-          if ((*target_uuid)->type != BT_UUID_TYPE_128) {
-            continue;
-          }
-          const uint8_t *target_uuid_value = BT_UUID_128(*target_uuid)->val;
-          if (memcmp(target_uuid_value, data->data + i, 16) == 0) {
-            scan_ad_data->uuids[scan_ad_data->uuids_count++] = *target_uuid;
-            continue;
-          }
-        }
-      }
-    }
-    break;
-  }
-  return true;
-}
-
-void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
-             struct net_buf_simple *buf) {
-  if (adv_type != BT_GAP_ADV_TYPE_ADV_IND &&
-      adv_type != BT_GAP_ADV_TYPE_SCAN_RSP) {
-    return;
-  }
-
-  if (!is_central_slot_open()) {
-    LOG_INF("Central slot is full, stopping scan");
-    bt_le_scan_stop();
-    return;
-  }
-
-  bool all_known = true;
-  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-    if (bt_addr_le_eq(&instance->known_peer, addr)) {
-      LOG_INF("Known peer found: %s", instance->profile->name);
-
-      bt_le_scan_stop();
-      int err = bt_conn_le_create(
-          addr, CONN_CREATE_PARAMS,
-          BT_LE_CONN_PARAM(60, 100, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2500)),
-          &instance->conn);
-
-      if (err) {
-        LOG_ERR("Failed to create connection (err %d)", err);
-      }
-
-      return;
-    }
-    if (memcmp(&instance->known_peer, BT_ADDR_LE_ANY, sizeof(bt_addr_le_t)) ==
-        0) {
-      all_known = false;
-    }
-  }
-  // all profiles have known peers, stop interpreting scan data
-  if (all_known) {
-    return;
-  }
-
-  if (rssi < CONFIG_PROXIMITY_PAIR_RSSI) {
-    // ignore too weak signal
-    return;
-  }
-  static struct scan_ad_data scan_ad_data = {0};
-  if (!bt_addr_le_eq(&scan_ad_data.peer, addr)) {
-    memset(&scan_ad_data, 0, sizeof(scan_ad_data));
-    bt_addr_le_copy(&scan_ad_data.peer, addr);
-  }
-
-  bt_data_parse(buf, scan_ad_data_callback, &scan_ad_data);
-
-  if (scan_ad_data.uuids_count == 0) {
-    return;
-  }
-
-  // find matching profile
-  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-    if (instance->conn != NULL) {
-      continue;
-    }
-
-    if (instance->profile->device_name_prefix != NULL) {
-      size_t len = strlen(instance->profile->device_name_prefix);
-      if (strlen(scan_ad_data.name) < len) {
-        continue;
-      }
-      if (memcmp(scan_ad_data.name, instance->profile->device_name_prefix,
-                 len) != 0) {
-        continue;
-      }
-    }
-    bool matches = true;
-
-    for (const struct bt_uuid *const *target_uuid =
-             instance->profile->service_uuids;
-         *target_uuid != NULL; target_uuid++) {
-      bool found = false;
-      for (size_t j = 0; j < scan_ad_data.uuids_count; j++) {
-        if (bt_uuid_cmp(*target_uuid, scan_ad_data.uuids[j]) == 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) {
-      LOG_INF("Matching profile found: %s", instance->profile->name);
-
-      bt_le_scan_stop();
-      int err = bt_conn_le_create(
-          addr, CONN_CREATE_PARAMS,
-          BT_LE_CONN_PARAM(80, 120, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2000)),
-          &instance->conn);
-
-      if (err) {
-        LOG_ERR("Failed to create connection (err %d)", err);
-      }
-
-      break;
-    }
-  }
-}
-
-static int scan_start() {
-  if (!is_central_slot_open()) {
-    return 0;
-  }
-  bt_le_scan_stop();
-
-  int err;
-
-  bool all_known = true;
-  bool fal_configured = true;
-  STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-    if (memcmp(&instance->known_peer, BT_ADDR_LE_ANY, sizeof(bt_addr_le_t)) ==
-        0) {
-      all_known = false;
-      break;
-    }
-    err = bt_le_filter_accept_list_add(&instance->known_peer);
-    if (err) {
-      LOG_WRN("Failed to add known peer to filter accept list (err %d)", err);
-      fal_configured = false;
-    }
-  }
-
-  LOG_INF("Configuring scanner (passive: %d, with_fal: %d)", all_known,
-          all_known && fal_configured);
-
-  err = bt_le_scan_start(
-      BT_LE_SCAN_PARAM(
-          all_known ? BT_LE_SCAN_TYPE_PASSIVE : BT_LE_SCAN_TYPE_ACTIVE,
-          (all_known && fal_configured) ? BT_LE_SCAN_OPT_FILTER_ACCEPT_LIST
-                                        : BT_LE_SCAN_OPT_NONE,
-          CONN_CREATE_PARAMS->interval * (low_power ? 8 : 1),
-          CONN_CREATE_PARAMS->window),
-      scan_cb);
-
-  if (err && err != -EALREADY) {
-    LOG_ERR("Scanning failed to start (err %d)", err);
-  } else {
-    if (err == 0) {
-      LOG_INF("Scanning started (passive: %d)", all_known);
-    }
-  }
-
-  return err;
 }
 
 uint8_t bt_gatt_discover_cb(struct bt_conn *conn,
@@ -514,7 +244,7 @@ static void discovery_not_found_cb(struct bt_conn *conn, void *context) {
       instance->is_registered = true;
     }
     // restart scanning for other profiles if needed
-    scan_start();
+    scan_start(true);
   }
 }
 
@@ -522,7 +252,7 @@ static void discovery_error_found_cb(struct bt_conn *conn, int err,
                                      void *context) {
   LOG_ERR("Discovery procedure failed with %d, disconnecting", err);
   bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-  scan_start();
+  scan_start(true);
 }
 
 const struct bt_gatt_dm_cb discovery_cb = {
@@ -545,12 +275,10 @@ static void pairing_complete(struct bt_conn *conn, bool bonded) {
 
   LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
   if (bonded) {
-    bt_le_scan_stop();
     int err = bt_le_filter_accept_list_add(bt_conn_get_dst(conn));
     if (err) {
       LOG_ERR("Failed to add peer to filter accept list (err %d)", err);
     }
-    scan_start();
   }
 }
 
@@ -579,8 +307,19 @@ static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey) {
   LOG_INF("Passkey for %s: %06u\n", addr, passkey);
 }
 
+static enum bt_security_err
+auth_pairing_accept(struct bt_conn *conn,
+                    const struct bt_conn_pairing_feat *const feat) {
+  if (advertising_is_public()) {
+    return BT_SECURITY_ERR_SUCCESS;
+  }
+  return BT_SECURITY_ERR_PAIR_NOT_ALLOWED;
+}
+
 static const struct bt_conn_auth_cb auth_callbacks = {
-    .passkey_display = auth_passkey_display, .cancel = auth_cancel};
+    .pairing_accept = auth_pairing_accept,
+    .passkey_display = auth_passkey_display,
+    .cancel = auth_cancel};
 
 static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
     .bond_deleted = bond_deleted,
@@ -615,10 +354,13 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       LOG_ERR("Connection attempt limit reached, resetting");
       sys_reboot(SYS_REBOOT_COLD);
     }
-    scan_start();
+    scan_start(true);
 
     if (instance) {
-      instance->conn = NULL;
+      struct bt_conn *conn = atomic_ptr_clear((void **)&instance->conn);
+      if (conn) {
+        led_temp_dim_dec();
+      }
     }
 
     bt_conn_unref(conn);
@@ -653,7 +395,7 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
     }
 
     // start scanning for other profiles
-    scan_start();
+    scan_start(true);
   } else {
     advertising_start();
     bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
@@ -693,6 +435,7 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
     led_clear_bit(instance->led_idx);
     if (conn) {
       bt_conn_unref(conn);
+      led_temp_dim_dec();
     }
   } else if (conn_info.role == BT_CONN_ROLE_CENTRAL) {
     bt_conn_unref(conn);
@@ -725,7 +468,7 @@ static void on_conn_recycled(void) {
   LOG_INF("Connection recycled");
   advertising_start();
 
-  scan_start();
+  scan_start(false);
 }
 
 void on_le_phy_updated(struct bt_conn *conn,
@@ -857,12 +600,7 @@ int bt_setup(void) {
 
   led_data_activity();
 
-  err = scan_start();
-
-  if (err) {
-    bt_disable();
-    return err;
-  }
+  scan_start(true);
 
 #if IS_ENABLED(CONFIG_ANT)
   err = bt_adv_set_device_number(ant_profiles_get_device_number());
@@ -947,13 +685,13 @@ int main_loop(void) {
   int64_t no_activity_since_ms = k_uptime_get();
 
   for (int i = 0;; i++) {
+    watchdog_feed();
     err = battery_gauge_upkeep();
     if (err) {
       LOG_ERR("Failed to upkeep battery gauge: %d", err);
     }
     uint16_t battery_mv = battery_gauge_get_mv();
     uint8_t battery_level = battery_gauge_get_level(battery_mv);
-    watchdog_feed();
     low_batt |= battery_level < LOW_BATTERY_THRESHOLD;
     low_batt &= battery_level <
                 LOW_BATTERY_THRESHOLD + LOW_BATTERY_THRESHOLD_HYSTERESIS;
@@ -967,6 +705,7 @@ int main_loop(void) {
       ((i % 2) ? led_set_bit : led_clear_bit)(POWER_LED_BIT);
     }
 
+#if CONFIG_POWEROFF
     uint32_t is_active = is_usb_connected();
     bt_conn_foreach(BT_CONN_TYPE_LE, bt_conn_foreach_count_connected_peripheral,
                     &is_active);
@@ -974,24 +713,6 @@ int main_loop(void) {
       no_activity_since_ms = k_uptime_get();
     }
 
-    if (CONFIG_LOW_POWER_TIMEOUT > 0) {
-      if (k_uptime_get() - no_activity_since_ms >
-          CONFIG_LOW_POWER_TIMEOUT * 1000) {
-        if (!low_power) {
-          low_power = true;
-          led_set_temp_dim(true);
-          scan_start();
-        }
-      } else {
-        if (low_power) {
-          low_power = false;
-          led_set_temp_dim(false);
-          scan_start();
-        }
-      }
-    }
-
-#if CONFIG_POWEROFF
     if (CONFIG_AUTO_POWER_OFF_TIMEOUT > 0 &&
         (k_uptime_get() - no_activity_since_ms) >
             CONFIG_AUTO_POWER_OFF_TIMEOUT * 1000) {

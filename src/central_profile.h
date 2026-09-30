@@ -30,6 +30,17 @@ struct central_profile_instance {
   bool is_registered;
 };
 
+/*
+ * Reset pairing for a specific profile or address.
+ * If key is NULL, all profiles will be reset.
+ * If key is a profile name, the corresponding profile will be reset.
+ * If key is a address, the corresponding profile will be reset.
+ *
+ * @param key The key to reset pairing.
+ * @return The number of profiles reset.
+ */
+uint8_t central_profile_reset_pairing(const char *key);
+
 // LED will be assigned in central_profile_init
 #define REGISTER_CENTRAL_PROFILE(name, val)                                    \
   STRUCT_SECTION_ITERABLE(central_profile_instance, name) = {                  \

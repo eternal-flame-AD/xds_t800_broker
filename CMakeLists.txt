@@ -69,6 +69,7 @@ target_sources(app PRIVATE
   src/central_profile.c
   src/leds.c
   src/advertiser.c
+  src/scanner.c
   src/gatt_callbacks.c
   src/gatt_battery.c
   src/gatt_dis.c

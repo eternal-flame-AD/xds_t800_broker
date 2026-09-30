@@ -15,4 +15,8 @@ void led_data_activity(void);
 void led_set_bit(uint8_t bit);
 void led_clear_bit(uint8_t bit);
 
-void led_set_temp_dim(bool dim);
+// increment reasons to keep LED in standard brightness
+void led_temp_dim_inc(void);
+
+// decrement reasons to keep LED in standard brightness
+void led_temp_dim_dec(void);

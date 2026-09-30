@@ -99,12 +99,18 @@ static void adv_work_handler(struct k_work *work) {
 
 K_WORK_DEFINE(adv_work, adv_work_handler);
 
+void advertising_stop(void) { bt_le_adv_stop(); }
+
 void advertising_start(void) {
   uint32_t count = 0;
   bt_conn_foreach(BT_CONN_TYPE_LE, bt_conn_foreach_count_central, &count);
   if (count < CONFIG_BT_CTLR_SDC_PERIPHERAL_COUNT) {
     k_work_submit(&adv_work);
   }
+}
+
+bool advertising_is_public(void) {
+  return advertiser_kind == ADVERTISER_KIND_PUBLIC;
 }
 
 int bt_adv_set_device_number(uint32_t device_number) {
@@ -176,6 +182,7 @@ static int bt_adv_settings_set(const char *name, size_t len,
     rc = read_cb(cb_arg, &kind, sizeof(kind));
     if (rc >= 0) {
       bt_adv_set_kind(kind);
+      return 0;
     }
     return rc;
   }

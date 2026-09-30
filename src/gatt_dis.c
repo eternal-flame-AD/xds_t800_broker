@@ -67,6 +67,9 @@ static int gatt_dis_settings_set(const char *name, size_t len,
     }
     memset(serial_number, 0, sizeof(serial_number));
     rc = read_cb(cb_arg, serial_number, sizeof(serial_number));
+    if (rc >= 0) {
+      return 0;
+    }
     return rc;
   }
 
@@ -78,6 +81,9 @@ static int gatt_dis_settings_set(const char *name, size_t len,
     }
     memset(software_revision, 0, sizeof(software_revision));
     rc = read_cb(cb_arg, software_revision, sizeof(software_revision));
+    if (rc >= 0) {
+      return 0;
+    }
     return rc;
   }
 
