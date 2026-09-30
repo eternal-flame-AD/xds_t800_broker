@@ -142,7 +142,7 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
       bt_le_scan_stop();
       int err = bt_conn_le_create(
           addr, CONN_CREATE_PARAMS,
-          BT_LE_CONN_PARAM(60, 100, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2500)),
+          BT_LE_CONN_PARAM(12, 36, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2500)),
           &instance->conn);
 
       if (err) {
@@ -218,7 +218,7 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
       bt_le_scan_stop();
       int err = bt_conn_le_create(
           addr, CONN_CREATE_PARAMS,
-          BT_LE_CONN_PARAM(80, 120, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2000)),
+          BT_LE_CONN_PARAM(12, 36, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2500)),
           &instance->conn);
 
       if (err) {

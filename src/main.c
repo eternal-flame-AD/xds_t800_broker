@@ -32,7 +32,7 @@
 
 #include "advertiser.h"
 #include "battery_gauge.h"
-#include "cac_acm_serial.h"
+#include "cdc_acm_serial.h"
 #include "central_profile.h"
 #include "central_t800.h"
 #include "gatt_battery.h"
@@ -51,8 +51,6 @@
 #include "ant_profiles.h"
 #include "shell_ant_slave.h"
 #endif
-
-#include "main.h"
 
 #define CONNECTION_ATTEMPT_LIMIT 3
 
@@ -75,6 +73,7 @@ const struct led_dt_spec vcc_poweroff_pin =
 #endif
 
 static uint8_t connection_attempt_count = 0;
+const static struct bt_gatt_dm_cb discovery_cb;
 
 static void bt_conn_foreach_count_connected_peripheral(struct bt_conn *conn,
                                                        void *data) {
@@ -255,7 +254,7 @@ static void discovery_error_found_cb(struct bt_conn *conn, int err,
   scan_start(true);
 }
 
-const struct bt_gatt_dm_cb discovery_cb = {
+const static struct bt_gatt_dm_cb discovery_cb = {
     .completed = discovery_completed_cb,
     .service_not_found = discovery_not_found_cb,
     .error_found = discovery_error_found_cb};
@@ -369,21 +368,15 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
   }
 
   LOG_INF("Connected: %s", addr);
+  err = bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
+  if (err) {
+    LOG_ERR("bt_gatt_exchange_mtu() returned %d", err);
+  }
 
   if (instance) {
     led_set_bit(instance->led_idx);
 
     instance->next_service_uuid = instance->profile->service_uuids;
-
-    const struct bt_conn_le_phy_param preferred_phy = {
-        .options = BT_CONN_LE_PHY_OPT_NONE,
-        .pref_rx_phy = BT_GAP_LE_PHY_CODED,
-        .pref_tx_phy = BT_GAP_LE_PHY_CODED,
-    };
-    err = bt_conn_le_phy_update(conn, &preferred_phy);
-    if (err) {
-      LOG_ERR("bt_conn_le_phy_update() returned %d", err);
-    }
 
     err = bt_gatt_dm_start(conn, *instance->next_service_uuid, &discovery_cb,
                            (void *)instance);
@@ -398,7 +391,6 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
     scan_start(true);
   } else {
     advertising_start();
-    bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
   }
 }
 
@@ -471,22 +463,11 @@ static void on_conn_recycled(void) {
   scan_start(false);
 }
 
-void on_le_phy_updated(struct bt_conn *conn,
-                       struct bt_conn_le_phy_info *param) {
-  LOG_INF("PHY updated. New PHY: %s",
-          (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_1M)         ? "1M"
-          : (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_2M)       ? "2M"
-          : (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_CODED_S2) ? "Coded(S2)"
-          : (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_CODED_S8) ? "Coded(S8)"
-                                                                : "Unknown");
-}
-
 BT_CONN_CB_DEFINE(conn_callbacks) = {
     .connected = on_connected,
     .disconnected = on_disconnected,
     .security_changed = on_security_changed,
     .recycled = on_conn_recycled,
-    .le_phy_updated = on_le_phy_updated,
 };
 
 #if IS_ENABLED(CONFIG_ANT)

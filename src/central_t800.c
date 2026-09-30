@@ -651,8 +651,13 @@ static int on_discovery(struct bt_gatt_dm *dm) {
 
 static void on_connected(struct bt_conn *conn) {
   LOG_INF("on_connected");
+  // slow down to 100-125ms after discovery
+  int err = bt_conn_le_param_update(
+      conn, BT_LE_CONN_PARAM(80, 120, 0, BT_GAP_MS_TO_CONN_TIMEOUT(2000)));
+  if (err) {
+    LOG_WRN("Failed to update connection parameters: %d", err);
+  }
 #if IS_ENABLED(CONFIG_ANT)
-  int err;
   err = ant_channel_open(bpwr_channel_config.channel_number);
   if (err) {
     LOG_ERR("Failed to open main channel: %d", err);
