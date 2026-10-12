@@ -12,35 +12,41 @@ Measurement Service so that regular head units can read it.
 
 ## Features
 
-- Low power consumption suitable for touring (~5mW excluding LED).
+- Low power consumption suitable for touring (~5mW)
 - Power, cadence and power balance readout
 - ANT+ Crankset Temperature (1degC precision)
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)
-- Optional auto power-off feature. Press any button to the wake the dongle up.
+- Auto power-off feature. Press any button or use the onboard accelerometer (tilt or shake) to the wake up. Default: 10 minutes if "st,lsm6dsl-wakeup" compatible is available on I2C bus, 60 minutes if at least one button is present, else disabled.
+- Bluetooth Channel Sounding for 
 - LED with dimmable brightness and automatic dimming after ~1m of activity.
 
 ## Requirements
 
 ### Physical Design
 
+![Example setups](assets/example_setups.jpg)
+
+Left-to-right:
+
 - Minimal: nRF52840 Dongle with an off-the-shelf unregulated
   3×AAA-to-USB adapter (battery wired directly to VBUS). 
   
   The following setup uses a clone with a built-in enclosure and weighs ~115g.
-
-  ![Example setup](assets/physical_dongle_nimh.jpg)
+  This is best for traveling as it contains no lithium batteries and has an inconspicuous look.
 
 - Cheapest: Nice!Nano or "Pro Micro nrf52840" clone.
 
   Quirk due to the Adafruit UF2 bootloader: After flashing new firmware, USB needs to be reconnected for serial to work.
 
-  This generally gets you the best standby current, but requires an external lithium battery connected by wires and therefore could pose an issue through security checkpoints.
+  Requires an external lithium battery connected by wires (through-hole). Use `prj_18650.conf` to override the battery gauge.
   
-- Robust: nRF52840 Dongle in a custom enclosure
-  with a hardwired battery. Requires the regulator modification described in the
-  [hardware guide](https://docs.nordicsemi.com/r/bundle/ug_nrf52840_dongle/page/ug/nrf52840_dongle/hw_power_ext_reg_source.html).
+- Smallest form factor: XIAO nRF54L15 Sense.
+
+  You can put the board plus a small 103030 lithium battery inside the small can it came with. This setup has an additional benefit of containing an accelerometer for waking the board up frictionlessly, and taking advantage of the latest generation nRF54 series for much longer battery life.
+
+  Requires an external lithium battery connected by wires (SMT). Use `prj_18650.conf` to override the battery gauge.
 
 Power banks or OTG cables are not recommended: most will shut off under light load, and the battery gauge will not work.
 
@@ -48,6 +54,7 @@ Power banks or OTG cables are not recommended: most will shut off under light lo
 
 These assume typical operation conditions: 
 
+- Pro-Micro nrf52840 is used.
 - The default 50% LED brightness option is used.
 - A T-800 sensor is already paired and persisted in flash.
 
@@ -78,7 +85,8 @@ touch the fixed feature list:
 
 - `prj.conf` — Required subsystem and feature selections. You generally do not
   edit this.
-- `prj_ant.conf` - Required feature selections to enable ANT+ support.
+- `prj_ant.conf` - Optional feature selections to enable ANT+ support.
+- `prj_cs.conf` - Optional feature selections for Bluetooth 6 Channel Sounding on nRF54 series.
 - `Kconfig.defconfig` — Factory defaults for upstream Kconfig symbols such as the
   Bluetooth device name.
 - `local.conf` — Per-build local overrides. Most users can simply leave this empty.
@@ -112,8 +120,6 @@ triggered by the side-mounted RESET button.
 For encased or waterproof potted devices that do not expose the RESET button,
 `src/bootloader.c` registers a `bootloader` shell command that enters the same USB DFU mode. The `selfreset` pin required for this feature is predefined for `boards/nrf52840dongle_nrf52840.overlay`.
 
-### Generate and flash a DFU package
-
 ```sh
 nrfutil pkg generate \
   --hw-version 52 \
@@ -125,6 +131,10 @@ nrfutil pkg generate \
 nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 ```
 
+The "Pro Micro nrf52840" is programmed by double tapping the RST pin to ground, and then copying the UF2 file into the virtual USB drive.
+
+The XIAO nRF54L15 is programmed via the onboard debug IC. You can either use `west flash` with a toolchain installed, or use the Factory Reset script provided by SEEED Studio [https://wiki.seeedstudio.com/xiao_nrf54l15_sense_getting_started/#restore-factory-settings].
+
 ## LED meaning
 
 On boards with RGB leds:
@@ -133,9 +143,9 @@ On boards with RGB leds:
 - Green: not used, reserved for a second custom central profile
 - Blue: flashes briefly for every valid power packet received
 
-On board with only one led:
+On board with only one led: blinks once every 2 seconds (twice if battery is low), additionally flashes briefly for every valid power packet received.
 
-- Red: powered on, flashes briefly for every valid power packet received
+On boards with PWM LED support: bright during high duty scan and when connected to a peripheral, dim when low duty scanning without active central roles.
 
 ## Pairing mode
 

@@ -40,3 +40,5 @@ void bt_adv_set_kind(enum advertiser_kind kind);
  * @param kind the advertiser kind to set
  */
 enum advertiser_kind bt_adv_get_kind(void);
+
+void advertising_notify_bond_changed(void);

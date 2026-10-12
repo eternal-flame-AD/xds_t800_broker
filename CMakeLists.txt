@@ -86,8 +86,12 @@ target_sources(app PRIVATE
   ${CENTRAL_SOURCES}
 )
 
-target_sources_ifdef(CONFIG_GATT_SYSTEM_INFO app PRIVATE
-  src/gatt_system_info.c
+target_sources_ifdef(CONFIG_USE_IMU_ST_LSM6DSL app PRIVATE
+  src/lsm6dsl.c
+)
+
+target_sources_ifdef(CONFIG_USE_RF_SW_CTL app PRIVATE
+  src/shell_rfsw.c
 )
 
 target_sources_ifdef(CONFIG_ANT app PRIVATE

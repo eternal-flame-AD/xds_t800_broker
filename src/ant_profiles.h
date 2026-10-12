@@ -14,7 +14,8 @@ extern struct ant_environ_s environ;
 
 extern ant_channel_config_t bpwr_channel_config;
 extern ant_channel_config_t bpwr_environ_channel_config;
-extern ant_channel_config_t antplus_generic_slave_config;
+extern ant_channel_config_t antplus_generic_slave0_config;
+extern ant_channel_config_t antplus_generic_slave1_config;
 
 uint32_t ant_profiles_create_device_number(uint32_t seed);
 

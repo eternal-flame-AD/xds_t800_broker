@@ -77,12 +77,11 @@ static int shell_bt_cmd_handler(const struct shell *shell, size_t argc,
               bt_adv_get_kind() == ADVERTISER_KIND_PRIVATE ? "Private"
                                                            : "Public");
   STRUCT_SECTION_FOREACH(central_profile_instance, instance) {
-    bt_addr_le_to_str(&instance->known_peer, addr_str, sizeof(addr_str));
-    struct bt_conn *conn = bt_conn_ref(instance->conn);
-
     shell_print(shell, "Profile %s:", instance->profile->name);
+    struct bt_conn *conn;
+    bt_addr_le_to_str(&instance->known_peer, addr_str, sizeof(addr_str));
     shell_print(shell, "  Peer Address: %s", addr_str);
-    if (conn) {
+    if (instance->conn && (conn = bt_conn_ref(instance->conn))) {
       struct bt_conn_info conn_info = {0};
       bt_conn_get_info(conn, &conn_info);
       shell_print(
@@ -92,6 +91,10 @@ static int shell_bt_cmd_handler(const struct shell *shell, size_t argc,
           : conn_info.state == BT_CONN_STATE_DISCONNECTING ? "Disconnecting"
           : conn_info.state == BT_CONN_STATE_CONNECTING    ? "Connecting"
                                                            : "Unknown");
+      if (conn_info.state != BT_CONN_STATE_CONNECTED) {
+        bt_conn_unref(conn);
+        continue;
+      }
       shell_print(shell, "  Interval: %d us", conn_info.le.interval_us);
       uint16_t handle;
       err = bt_hci_get_conn_handle(conn, &handle);

@@ -10,6 +10,11 @@
 #include <ant_key_manager.h>
 #endif
 
+#if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
+#include <bluetooth/services/ras.h>
+#include <zephyr/bluetooth/cs.h>
+#endif
+
 #include <zephyr/bluetooth/assigned_numbers.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -17,6 +22,7 @@
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/led.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -37,13 +43,14 @@
 #include "central_t800.h"
 #include "gatt_battery.h"
 #include "leds.h"
+
+#if IS_ENABLED(CONFIG_USE_IMU_ST_LSM6DSL)
+#include "lsm6dsl.h"
+#endif
+
 #include "poweroff.h"
 #include "scanner.h"
 #include "watchdog.h"
-
-#if IS_ENABLED(CONFIG_GATT_SYSTEM_INFO)
-#include "gatt_system_info.h"
-#endif
 
 #if IS_ENABLED(CONFIG_ANT)
 #include "ant_init.h"
@@ -74,6 +81,12 @@ const struct led_dt_spec vcc_poweroff_pin =
 
 static uint8_t connection_attempt_count = 0;
 const static struct bt_gatt_dm_cb discovery_cb;
+
+// some board variants of the XIAO nrf54L15 does not have this.
+// so we need to catch and change behavior
+#if IS_ENABLED(CONFIG_USE_IMU_ST_LSM6DSL)
+static bool lsm6dsl_initialized = false;
+#endif
 
 static void bt_conn_foreach_count_connected_peripheral(struct bt_conn *conn,
                                                        void *data) {
@@ -274,10 +287,7 @@ static void pairing_complete(struct bt_conn *conn, bool bonded) {
 
   LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
   if (bonded) {
-    int err = bt_le_filter_accept_list_add(bt_conn_get_dst(conn));
-    if (err) {
-      LOG_ERR("Failed to add peer to filter accept list (err %d)", err);
-    }
+    advertising_notify_bond_changed();
   }
 }
 
@@ -294,10 +304,7 @@ static void bond_deleted(uint8_t id, const bt_addr_le_t *peer) {
   char addr[BT_ADDR_LE_STR_LEN];
   bt_addr_le_to_str(peer, addr, sizeof(addr));
   LOG_INF("Bond deleted: %s", addr);
-  int err = bt_le_filter_accept_list_remove(peer);
-  if (err) {
-    LOG_ERR("Failed to remove peer from filter accept list (err %d)", err);
-  }
+  advertising_notify_bond_changed();
 }
 
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey) {
@@ -346,9 +353,11 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
     LOG_ERR("Failed to connect to %s, 0x%02x %s", addr, conn_err,
             bt_hci_err_to_str(conn_err));
 
-    // do not count connection attempts for peripheral connections
-    // (such as a computer being barely in range)
+    // do not count strikes against connection attempts for peripheral
+    // connections or remote lack of response
     if (conn_info.role != BT_CONN_ROLE_PERIPHERAL &&
+        conn_err != BT_HCI_ERR_PAGE_TIMEOUT &&
+        conn_err != BT_HCI_ERR_CONN_TIMEOUT &&
         ++connection_attempt_count > CONNECTION_ATTEMPT_LIMIT) {
       LOG_ERR("Connection attempt limit reached, resetting");
       sys_reboot(SYS_REBOOT_COLD);
@@ -444,12 +453,29 @@ static void on_security_changed(struct bt_conn *conn, bt_security_t level,
 
   bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
+  struct bt_conn_info conn_info = {0};
+  bt_conn_get_info(conn, &conn_info);
+
   if (!err) {
     LOG_INF("Security changed: %s level %u", addr, level);
-    if (level == BT_SECURITY_L4) {
+    if (conn_info.role == BT_CONN_ROLE_PERIPHERAL && level == BT_SECURITY_L4) {
       if (atomic_ptr_cas((void **)&nus_conn, NULL, (void *)conn)) {
         shell_bt_nus_enable(conn);
       }
+#if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
+      const struct bt_le_cs_set_default_settings_param default_settings = {
+          .enable_initiator_role = false,
+          .enable_reflector_role = true,
+          .cs_sync_antenna_selection =
+              BT_LE_CS_ANTENNA_SELECTION_OPT_REPETITIVE,
+          .max_tx_power = BT_HCI_OP_LE_CS_MAX_MAX_TX_POWER,
+      };
+
+      err = bt_le_cs_set_default_settings(conn, &default_settings);
+      if (err) {
+        LOG_ERR("Failed to configure default CS settings (err %d)", err);
+      }
+#endif
     }
   } else {
     LOG_ERR("Security failed: %s level %u err %d", addr, level, err);
@@ -463,11 +489,42 @@ static void on_conn_recycled(void) {
   scan_start(false);
 }
 
+#if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
+static void on_le_cs_config_complete(struct bt_conn *conn, uint8_t status,
+                                     struct bt_conn_le_cs_config *config) {
+
+  const struct bt_le_cs_set_procedure_parameters_param procedure_params = {
+      .config_id = 0,
+      .max_procedure_len = 2000,
+      .min_procedure_interval = 1,
+      .max_procedure_interval = 200,
+      .max_procedure_count = 0,
+      .min_subevent_len = 10000,
+      .max_subevent_len = 75000,
+      .tone_antenna_config_selection =
+          BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A1_B1,
+      .phy = BT_LE_CS_PROCEDURE_PHY_1M,
+      .tx_power_delta = 0x80,
+      .preferred_peer_antenna = BT_LE_CS_PROCEDURE_PREFERRED_PEER_ANTENNA_1,
+      .snr_control_initiator = BT_LE_CS_SNR_CONTROL_NOT_USED,
+      .snr_control_reflector = BT_LE_CS_SNR_CONTROL_NOT_USED,
+  };
+
+  int err = bt_le_cs_set_procedure_parameters(conn, &procedure_params);
+  if (err) {
+    LOG_ERR("Failed to set procedure parameters (err %d)", err);
+  }
+}
+#endif
+
 BT_CONN_CB_DEFINE(conn_callbacks) = {
     .connected = on_connected,
     .disconnected = on_disconnected,
     .security_changed = on_security_changed,
     .recycled = on_conn_recycled,
+#if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
+    .le_cs_config_complete = on_le_cs_config_complete,
+#endif
 };
 
 #if IS_ENABLED(CONFIG_ANT)
@@ -481,7 +538,9 @@ static void ant_evt_handler(ant_evt_t *p_ant_evt) {
     ant_environ_evt_handler(p_ant_evt, &environ);
     return;
   } else if (p_ant_evt->channel ==
-             antplus_generic_slave_config.channel_number) {
+                 antplus_generic_slave0_config.channel_number ||
+             p_ant_evt->channel ==
+                 antplus_generic_slave1_config.channel_number) {
     ant_generic_slave_evt_handler(p_ant_evt);
     return;
   }
@@ -539,21 +598,6 @@ static int ant_profile_setup(void) {
 
 #endif
 
-static void setup_accept_list_cb(const struct bt_bond_info *info,
-                                 void *user_data) {
-  int *bond_cnt = user_data;
-  if ((*bond_cnt) < 0) {
-    return;
-  }
-  int err = bt_le_filter_accept_list_add(&info->addr);
-  if (err) {
-    LOG_INF("Cannot add peer to Filter Accept List (err: %d)\n", err);
-    (*bond_cnt) = -EIO;
-  } else {
-    (*bond_cnt)++;
-  }
-}
-
 int bt_setup(void) {
   int err;
   err = bt_enable(NULL);
@@ -565,19 +609,6 @@ int bt_setup(void) {
   }
 
   settings_load();
-
-  err = bt_le_filter_accept_list_clear();
-  if (err) {
-    LOG_ERR("bt_le_filter_accept_list_clear failed: %d", err);
-    return err;
-  }
-  int bond_cnt = 0;
-  bt_foreach_bond(BT_ID_DEFAULT, setup_accept_list_cb, &bond_cnt);
-  if (bond_cnt < 0) {
-    LOG_ERR("Failed to add bonds to accept list");
-    bt_disable();
-    return -EIO;
-  }
 
   led_data_activity();
 
@@ -607,10 +638,14 @@ int main_loop(void) {
   LOG_INIT();
   LOG_INF("Reset reason: %d", watchdog_get_reset_reason());
 
+#if IS_ENABLED(CONFIG_USE_IMU_ST_LSM6DSL)
+  lsm6dsl_initialized = lsmdsl_wakeup_is_available();
+  LOG_INF("LSM6DSL init success: %d", lsm6dsl_initialized);
+#endif
+
   err = battery_gauge_setup();
   if (err) {
     LOG_ERR("Failed to setup battery gauge: %d", err);
-    return err;
   }
 
   err = dk_buttons_init(btn_handler_fn);
@@ -657,20 +692,10 @@ int main_loop(void) {
     return err;
   }
 
-#if IS_ENABLED(CONFIG_GATT_SYSTEM_INFO)
-  gatt_sys_info_init();
-#endif
-
-  led_set_bit(POWER_LED_BIT);
-
   int64_t no_activity_since_ms = k_uptime_get();
 
   for (int i = 0;; i++) {
     watchdog_feed();
-    err = battery_gauge_upkeep();
-    if (err) {
-      LOG_ERR("Failed to upkeep battery gauge: %d", err);
-    }
     uint16_t battery_mv = battery_gauge_get_mv();
     uint8_t battery_level = battery_gauge_get_level(battery_mv);
     low_batt |= battery_level < LOW_BATTERY_THRESHOLD;
@@ -682,27 +707,47 @@ int main_loop(void) {
     ant_bike_power_set_self_battery_state(&bike_power, battery_level,
                                           battery_mv);
 #endif
-    if (low_batt) {
-      ((i % 2) ? led_set_bit : led_clear_bit)(POWER_LED_BIT);
-    }
 
-#if CONFIG_POWEROFF
+    led_set_bit(POWER_LED_BIT);
+    k_sleep(K_MSEC(75));
+    if (low_batt) {
+      led_clear_bit(POWER_LED_BIT);
+    }
+    k_sleep(K_MSEC(75));
+    if (low_batt) {
+      led_set_bit(POWER_LED_BIT);
+    }
+    k_sleep(K_MSEC(75));
+    led_clear_bit(POWER_LED_BIT);
+
+#if defined(CONFIG_AUTO_POWER_OFF_TIMEOUT) && CONFIG_AUTO_POWER_OFF_TIMEOUT > 0
     uint32_t is_active = is_usb_connected();
     bt_conn_foreach(BT_CONN_TYPE_LE, bt_conn_foreach_count_connected_peripheral,
                     &is_active);
     if (is_active) {
       no_activity_since_ms = k_uptime_get();
+    } else {
+#if IS_ENABLED(CONFIG_AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER)
+      if (lsm6dsl_initialized) {
+        no_activity_since_ms =
+            MAX(no_activity_since_ms, lsm6dsl_get_time_since_last_activity());
+      }
+#endif // IS_ENABLED(CONFIG_AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER)
     }
 
-    if (CONFIG_AUTO_POWER_OFF_TIMEOUT > 0 &&
+    if (
+#if IS_ENABLED(CONFIG_AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER)
+        lsm6dsl_initialized &&
+#endif // IS_ENABLED(CONFIG_AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER)
         (k_uptime_get() - no_activity_since_ms) >
             CONFIG_AUTO_POWER_OFF_TIMEOUT * 1000) {
       LOG_INF("Auto power off triggered");
       enter_poweroff();
     }
-#endif
+#endif // defined(CONFIG_AUTO_POWER_OFF_TIMEOUT) &&
+       // CONFIG_AUTO_POWER_OFF_TIMEOUT > 0
 
-    k_sleep(K_MSEC(1000));
+    k_sleep(K_MSEC(2000 - 75 * 3));
   }
 
   LOG_WRN("Main loop exited");

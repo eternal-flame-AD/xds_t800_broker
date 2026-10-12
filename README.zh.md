@@ -10,34 +10,40 @@
 
 ## 功能特性
 
-- 低功耗，适合长途骑行（约 5 mW，不含LED）。
+- 低功耗，适合长途骑行（约 5 mW）
 - 功率、踏频与左右平衡读数
 - ANT+ 曲柄温度（1°C 精度）
 - 功率计电池读数（ANT+ 上显示为“右侧/电池 1”，BLE 上显示为“外部电池”）
 - 使用电池供电时，板载电量计支持可配置放电曲线（ANT+ 上显示为“左侧/电池 2”，BLE 上显示为“内部电池”）
 - 零点补偿（校准）支持，并支持回读偏移量（已在 Garmin Edge 1050 上测试）
-- 可选自动关机功能。按任意键唤醒转发器。
-- 可調整亮度功能的 LED，約 1 分鐘無活動後會自動調暗。
+- 自动关机。按任意按键，或通过板载加速度计（倾斜或摇晃）唤醒。默认超时：若 I2C 总线上存在兼容 `st,lsm6dsl-wakeup` 的设备则为 10 分钟；若至少有一个按键则为 60 分钟；否则关闭。
+- 蓝牙信道探测（Channel Sounding）用于
+- 可调亮度的 LED，约 1 分钟无活动后会自动调暗。
 
 ## 要求
 
 ### 硬件方案
 
+![示例安装方式](assets/example_setups.jpg)
+
+从左到右：
+
 - 最小方案：nRF52840 Dongle + 市面上常见的非稳压 3 节 AAA 转 USB 电池盒（电池直接接 VBUS）。
 
-  下图示例使用带一体外壳的克隆板，整体重量约 115g。
-
-  ![示例安装方式](assets/physical_dongle_nimh.jpg)
+  该方案使用带一体外壳的克隆板，整体重量约 115g。
+  最适合出行：不含锂电池，外观也不显眼。
 
 - 最便宜方案：Nice!Nano 或 “Pro Micro nrf52840” 克隆板。
-  
+
   注意：由于 Adafruit UF2 引导程序的特性，刷入新固件后需要重新插拔 USB，串口才能正常工作。
 
-  这种方案通常能获得最低的待机电流，但需要外接锂电池并用导线连接，因此过安检时可能会遇到问题。
+  需要用导线外接锂电池（直插焊盘）。使用 `prj_18650.conf` 覆盖电量计配置。
 
-- 坚固方案：nRF52840 Dongle 装入定制外壳，并焊接固定电池。需要参考 Nordic 的
-  [硬件指南](https://docs.nordicsemi.com/r/bundle/ug_nrf52840_dongle/page/ug/nrf52840_dongle/hw_power_ext_reg_source.html)
-  对稳压器进行修改。
+- 最小体积：XIAO nRF54L15 Sense。
+
+  可以把开发板和一块小型 103030 锂电池放进随附的小铁盒里。这个方案还有一个额外好处：板载加速度计可以无感唤醒设备，并且能利用最新一代 nRF54 系列获得更长的续航。
+
+  需要用导线外接锂电池（贴片焊盘）。使用 `prj_18650.conf` 覆盖电量计配置。
 
 不推荐使用移动电源或 OTG 线：大多数移动电源在轻负载下会自动断电，且电量计无法正常工作。
 
@@ -45,6 +51,7 @@
 
 以下数值假设典型工作条件：
 
+- 使用 Pro Micro nrf52840。
 - 使用默认的 50% LED 亮度。
 - T-800 传感器已配对并持久化保存在 Flash 中。
 
@@ -55,25 +62,24 @@
 
 ### 自定义电池电量计
 
-如需自定义电池方案，可在 `local.conf` 中设置 `CONFIG_BATTERY_CELL_COUNT`
-和 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*` 选项（如 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_10`
-等），以匹配你的串联节数和放电曲线。默认值针对 3 节镍氢电池调校。
+如需自定义电池方案，可在 `local.conf` 中设置 `CONFIG_BATTERY_CELL_COUNT` 和 `CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_*` 选项，以匹配你的串联节数和放电曲线。默认值针对 3 节镍氢电池调校。
 
 ### 开发环境
 
-- nRF Connect SDK (NCS) v3.2.4 或以上
-- nRF52840 Dongle 或任何具备必要外设的兼容 nRF52 开发板（比如 52840 DK）
+- nRF Connect SDK (NCS) v3.2.4 或以上。
+- nRF52840 Dongle 或任何具备必要外设的兼容 nRF52 开发板（比如 52840 DK）。
 
-如果需要启用 ANT+ 支持，额外需要：
+如果需要启用 ANT+ 支持：
 
-- 已克隆到 NCS 目录下的 ANT SDK 模块（`<NCS>/ant`）。该模块版本必须与 NCS 版本匹配 （目前 v3.2.4），否则可能出现无线电静默！
+- 已克隆到 NCS 目录下的 ANT SDK 模块（`<NCS>/ant`）。该模块版本必须与 SDK 的发行说明匹配（截至 2026 年为 v3.2.4），否则可能出现无线电静默！
 
 ## 配置层级
 
 配置分为三层，便于在不改动固定功能的前提下，单独管理每次部署的个性化设置：
 
 - `prj.conf` — 必需的子系统和功能选择。通常不需要手动修改。
-- `prj_ant.conf` — 启用 ANT+ 必需的子系统和功能选择。
+- `prj_ant.conf` — 启用 ANT+ 的可选功能选择。
+- `prj_cs.conf` - 启用 Bluetooth Channel Sounding 的可选功能选择（需要 nRF54 系列）。
 - `Kconfig.defconfig` — 上游 Kconfig 符号的出厂默认值，例如蓝牙设备名称。
 - `local.conf` — 每次构建时的本地覆盖。大多数用户可以直接留空。
 
@@ -93,16 +99,13 @@ west build --build-dir build \
   -DDTC_OVERLAY_FILE=boards/nrf52840dongle_nrf52840.overlay
 ```
 
-`local.conf.example` 中提供了一些可选的覆盖示例，例如校准电量计或修改设备信息服务字符串。这些**不是**推荐默认配置！
+`local.conf.example` 中提供了一些可选的覆盖示例，适用于特定方案（例如校准电量计或修改设备信息服务字符串）。这些不是推荐默认配置！
 
 ## 烧录
 
 nRF52840 Dongle 通常通过 USB DFU 烧录，按下侧边的 RESET 按钮即可触发。
-对于封装或防水灌胶、无法触及 RESET 按钮的设备，`src/bootloader.c`
-注册了一个 `bootloader` shell 命令，可进入同样的 USB DFU 模式。
-该命令需要 `boards/nrf52840dongle_nrf52840.overlay` 中定义的 `selfreset` 引脚，对其他设备不可用。
 
-### 生成并烧录 DFU 升级包
+对于封装或防水灌胶、无法触及 RESET 按钮的设备，`src/bootloader.c` 注册了一个 `bootloader` shell 命令，可进入同样的 USB DFU 模式。该功能所需的 `selfreset` 引脚已在 `boards/nrf52840dongle_nrf52840.overlay` 中预定义。
 
 ```sh
 nrfutil pkg generate \
@@ -115,27 +118,31 @@ nrfutil pkg generate \
 nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 ```
 
+“Pro Micro nrf52840” 的烧录方式是将 RST 引脚对地双击，然后把 UF2 文件复制到虚拟 U 盘中。
+
+XIAO nRF54L15 通过板载调试芯片烧录。可以在已安装工具链的情况下使用 `west flash`，也可以使用 SEEED Studio 提供的恢复出厂设置脚本：[https://wiki.seeedstudio.com/xiao_nrf54l15_sense_getting_started/#restore-factory-settings](https://wiki.seeedstudio.com/xiao_nrf54l15_sense_getting_started/#restore-factory-settings)。
+
 ## 指示灯含义
 
 带 RGB LED 的板子：
 
 - 红色：转发器已连接到 T-800 传感器
 - 绿色：当前未使用，预留用于第二个自定义 central 配置文件
-- 蓝色：每收到一个有效的功率数据包时闪烁一次
+- 蓝色：每收到一个有效的功率数据包时短暂闪烁
 
-仅带一个 LED 的板子：
+仅有一个 LED 的板子：每 2 秒闪烁一次（电量低时闪两次），每收到一个有效功率数据包时再短暂闪烁一次。
 
-- 红色：已上电，每收到一个有效的功率数据包时闪烁一次
+支持 PWM LED 的板子：高占空比扫描以及已连接到外设时较亮；没有活动 central 角色、处于低占空比扫描时变暗。
 
 ## 配对模式
 
 首先确保功率计已唤醒，且未连接其他设备——此时曲柄底部的绿色指示灯应呈绿色闪烁。
 
-出厂系统自动进入配对模式。要连接新的 T-800 传感器，请长按 Dongle 按钮。保持按住 3 秒左右直到蓝色指示灯短暂闪烁。这会清除本次启动时读取的已有传感器配对信息，并让转发器在近距离内发现并保存新的传感器。
+出厂状态下 Dongle 会自动进入配对。要连接新的 T-800 传感器，请长按 Dongle 按钮约 3 秒，直到蓝色指示灯短暂闪烁。这会清除本次启动时已保存的传感器配对信息，并让转发器在近距离内发现并保存新的传感器。
 
-连接成功后，可以通过以下方式确认：功率计上的指示灯变为常亮绿色，并且码表上显示的序列号后四位与 XDS Ride App 中显示的后四位一致。
+连接成功后，可以通过以下方式确认：功率计上的指示灯变为常亮绿色，并且码表上显示的序列号与 XDS Ride App 中显示的后四位一致。
 
-注意：需先连接传感器，然后配对码表。传感器未连接时 ANT+ 不会激活。
+注意：需要先连接传感器，再把转发器配对到码表。传感器未连接时 ANT+ 不会激活。
 
 ## 高级用法与开发
 
@@ -157,21 +164,17 @@ nrfutil device program --traits nordicDfu --firmware build/zephyr.zip
 
 ### 蓝牙 UART Shell
 
-转发器通过 Nordic UART Service（NUS）暴露一个 Zephyr shell，方便现场测试。
+转发器通过 Nordic UART Service（NUS）暴露一个 Zephyr shell，方便现场测试。由于 shell 包含 `devmem` 等敏感命令，手机必须先与转发器建立 LESC 绑定，才能使用 NUS。
 
-由于 shell 包含 `devmem` 等敏感命令，手机必须先与转发器建立 LESC 绑定，才能使用 NUS shell。
+第一次绑定时，把转发器接到 USB/UART shell，并在日志输出中查看 6 位配对码。然后使用 **nRF Toolbox** 或 **nRF Connect** 配对：
 
-第一次绑定需要通过 USB/UART shell 获取并显示 6 位配对码，然后在手机 App 中输入确认：
-
-1. 在手机上打开 **nRF Toolbox** 或 **nRF Connect**。
-2. 扫描并连接名为 `XDS_T800_Broker` 的设备（或者你通过 `CONFIG_BT_DEVICE_NAME` 自定义的名称）。
-3. 转发器会请求 LE 安全连接配对，并在日志或 shell 输出中显示 6 位配对码。
-4. 在手机 App 中输入配对码并确认。
-5. 绑定完成后，Nordic UART Service 解锁。你可以在 nRF Toolbox 中打开 **UART** 模块发送命令，转发器也会将日志回传到手机。
+1. 扫描并连接名为 `XDS_T800_Broker` 的设备（或者你通过 `CONFIG_BT_DEVICE_NAME` 自定义的名称）。
+2. 确认 LE 安全连接配对，并输入 shell 日志中显示的配对码。
+3. 绑定完成后，UART 模块解锁，转发器会把日志回传到手机。
 
 绑定信息保存在 Flash 中，并通过 `settings_load()` 在启动时恢复，因此手机只需配对一次。
 
-如果进行路边现场测试，请选择安全地点，并始终注意周围环境！
+如果进行现场测试，请选择安全地点，并始终注意道路周围环境！
 
 ### 绑定管理
 
@@ -188,14 +191,14 @@ Zephyr shell 可通过控制台 UART（Dongle 上为 USB CDC ACM）访问，绑�
 
 转发器基于 `central_profile` 抽象实现，这样无需重写蓝牙扫描、连接和发现逻辑，就能同时适配更多传感器。
 
-T-800 功率计是一个不限制中央设备地址的外设，任何 central 都能连接，因此 central 角色的地址通常无关紧要。`CONFIG_BT_PRIVACY=y`（默认值）会让转发器在作为 central 时使用随机可解析地址。只有当你添加第二个 BLE central 配置文件，且目标设备在意或会过滤 central 地址时，才需要考虑这一点；禁用该选项需要在 `local.conf` 中设置 `CONFIG_BT_PRIVACY=n`，但这同时也会禁用私密广播。
+T-800 功率计是一个不做筛选的外设，任何 central 都能连接，因此 central 角色的地址通常无关紧要。`CONFIG_BT_PRIVACY=y`（默认值）会让转发器在作为 central 时使用随机可解析地址。只有当你添加第二个 BLE central 配置文件，且目标设备在意或会过滤 central 地址时，才需要考虑这一点；禁用该选项需要设置 `CONFIG_BT_PRIVACY=n`，这同时也会禁用私密广播。
 
-项目可以同时追踪电变等其他需要转发的传感器。第三方插件可以根据 `src/central_profile.h` 中的定义，使用 `REGISTER_CENTRAL_PROFILE(name, &val)` 注册，最终使用 `-DCENTRAL_SOURCES` 加入构建。
+电变等第三方配置文件可以根据 `src/central_profile.h` 中的定义，使用 `REGISTER_CENTRAL_PROFILE(name, &val)` 注册，并通过 `-DCENTRAL_SOURCES` 加入构建。
 
 T-800 的实现位于 `src/central_t800.c`。
 
-主循环会扫描广播中包含 `service_uuids` 所有 UUID 且设备名称以 `device_name_prefix` 开头的外设。匹配后，转发器连接、发现列出的服务，并对每个服务调用 `on_discovery`。所有服务发现完成后调用 `on_connected`。对端地址会持久化到 settings 中，以便后续启动时快速重连。
+主循环会扫描广播中包含 `service_uuids` 列出的全部 UUID、且设备名称以 `device_name_prefix` 开头的外设。匹配后，转发器连接、发现列出的服务，并对每个服务调用 `on_discovery`。所有服务发现完成后调用 `on_connected`。对端地址会持久化到 settings 中，以便后续启动时快速重连。
 
 ## 许可证
 
-详见 `LICENSE` 文件。
+详见 `LICENSE`。

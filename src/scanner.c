@@ -2,6 +2,7 @@
 #include "advertiser.h"
 #include "central_profile.h"
 #include "leds.h"
+#include "zephyr/bluetooth/gatt.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <zephyr/logging/log.h>

@@ -1,4 +1,10 @@
 / {
+	zephyr,user {
+		vbat-divider-ratio = <5>;
+		io-channels = <&adc 0>;
+		io-channel-names = "vbat";
+	};
+
 	aliases {
 		data-activity-led = &red_pwm_led;
 	};
@@ -13,6 +19,20 @@
 	};
 };
 
+&adc {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 20)>;
+		zephyr,input-positive = <NRF_SAADC_VDDHDIV5>;
+		zephyr,resolution = <14>;
+		zephyr,oversampling = <2>;
+	};
+};
 
 &spi0 {
 	status = "disabled";

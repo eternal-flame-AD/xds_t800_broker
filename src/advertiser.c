@@ -8,11 +8,15 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
 
+#if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
+#include <bluetooth/services/ras.h>
+#endif
+
 LOG_MODULE_REGISTER(advertiser, LOG_LEVEL_INF);
 
 static enum advertiser_kind advertiser_kind = ADVERTISER_KIND_PUBLIC;
 
-static bool advertiser_kind_update_pending = false;
+static bool fal_update_pending = true;
 
 #define SETTINGS_ADV_SUBTREE "adv"
 #define SETTINGS_ADV_KIND_SEGMENT "kind"
@@ -25,7 +29,11 @@ static const struct bt_data ad[] = {
                   (CONFIG_BT_DEVICE_APPEARANCE >> 0) & 0xff,
                   (CONFIG_BT_DEVICE_APPEARANCE >> 8) & 0xff),
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_CPS_VAL),
-                  BT_UUID_16_ENCODE(BT_UUID_BAS_VAL)),
+                  BT_UUID_16_ENCODE(BT_UUID_BAS_VAL),
+#if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
+                  BT_UUID_16_ENCODE(BT_UUID_RANGING_SERVICE_VAL),
+#endif
+                  ),
 };
 
 #define BT_DEVICE_NAME_LEN (sizeof(CONFIG_BT_DEVICE_NAME) - 1)
@@ -61,13 +69,44 @@ static void bt_conn_foreach_count_central(struct bt_conn *conn, void *data) {
   (*count)++;
 }
 
+static void setup_accept_list_cb(const struct bt_bond_info *info,
+                                 void *user_data) {
+  int *bond_cnt = user_data;
+  if ((*bond_cnt) < 0) {
+    return;
+  }
+  int err = bt_le_filter_accept_list_add(&info->addr);
+  if (err) {
+    LOG_INF("Cannot add peer to Filter Accept List (err: %d)\n", err);
+    (*bond_cnt) = -EIO;
+  } else {
+    (*bond_cnt)++;
+  }
+}
+
 static void adv_work_handler(struct k_work *work) {
+  int err;
   uint32_t options = BT_LE_ADV_OPT_CONN;
   switch (advertiser_kind) {
   case ADVERTISER_KIND_PUBLIC:
     options |= BT_LE_ADV_OPT_USE_IDENTITY;
     break;
   case ADVERTISER_KIND_PRIVATE:
+    if (fal_update_pending) {
+      bt_le_adv_stop();
+      err = bt_le_filter_accept_list_clear();
+      if (err) {
+        LOG_ERR("bt_le_filter_accept_list_clear failed: %d", err);
+      } else {
+        int bond_cnt = 0;
+        bt_foreach_bond(BT_ID_DEFAULT, setup_accept_list_cb, &bond_cnt);
+        if (bond_cnt < 0) {
+          LOG_ERR("Failed to add bonds to accept list");
+        }
+        LOG_INF("Filter Accept List updated");
+        fal_update_pending = false;
+      }
+    }
     options |= BT_LE_ADV_OPT_FILTER_SCAN_REQ | BT_LE_ADV_OPT_FILTER_CONN;
     break;
   default:
@@ -75,23 +114,38 @@ static void adv_work_handler(struct k_work *work) {
     options |= BT_LE_ADV_OPT_USE_IDENTITY;
     return;
   }
-  int err =
-      bt_le_adv_start(BT_LE_ADV_PARAM(options, BT_GAP_MS_TO_ADV_INTERVAL(800),
-                                      BT_GAP_MS_TO_ADV_INTERVAL(1200), NULL),
-                      ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+  err = bt_le_adv_start(BT_LE_ADV_PARAM(options, BT_GAP_MS_TO_ADV_INTERVAL(800),
+                                        BT_GAP_MS_TO_ADV_INTERVAL(1200), NULL),
+                        ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 
   if (err && err != -EALREADY) {
     LOG_ERR("Advertising failed to start (err %d)", err);
     return;
   }
 
-  if (advertiser_kind_update_pending) {
-    advertiser_kind_update_pending = false;
+  bool need_update =
+      sizeof(advertiser_kind) !=
+      settings_get_val_len(SETTINGS_ADV_SUBTREE "/" SETTINGS_ADV_KIND_SEGMENT);
+
+  if (!need_update) {
+    enum advertiser_kind existing_kind;
+    int rc =
+        settings_load_one(SETTINGS_ADV_SUBTREE "/" SETTINGS_ADV_KIND_SEGMENT,
+                          &existing_kind, sizeof(existing_kind));
+    if (rc < 0) {
+      LOG_ERR("Failed to load advertiser kind (err %d)", err);
+    } else {
+      need_update = existing_kind != advertiser_kind;
+    }
+  }
+
+  if (need_update) {
     err = settings_save_one(SETTINGS_ADV_SUBTREE "/" SETTINGS_ADV_KIND_SEGMENT,
                             &advertiser_kind, sizeof(advertiser_kind));
     if (err) {
       LOG_ERR("Failed to save advertiser kind (err %d)", err);
     }
+    LOG_INF("Advertiser kind saves as %d", advertiser_kind);
   }
 
   LOG_INF("Advertising successfully started");
@@ -115,15 +169,18 @@ bool advertising_is_public(void) {
 
 int bt_adv_set_device_number(uint32_t device_number) {
   char new_device_name[ARRAY_SIZE(sd_device_name)] = {0};
-  int len = snprintf(new_device_name, ARRAY_SIZE(sd_device_name), "%s-%" PRIu32,
-                     CONFIG_BT_DEVICE_NAME, device_number);
+  memcpy(new_device_name, CONFIG_BT_DEVICE_NAME, BT_DEVICE_NAME_LEN);
+  int len = snprintf(new_device_name + BT_DEVICE_NAME_LEN,
+                     ARRAY_SIZE(sd_device_name) - BT_DEVICE_NAME_LEN,
+                     "-%" PRIu32, device_number);
   if (len < 0) {
     LOG_ERR("Failed to format new name (err %d)", len);
     return -EINVAL;
   }
+  len += BT_DEVICE_NAME_LEN;
   new_device_name[CONFIG_BT_DEVICE_NAME_MAX] =
       '\0'; // force truncate to maximum size
-  if (0 == strcmp(new_device_name, sd_device_name)) {
+  if (0 == memcmp(new_device_name, sd_device_name, sizeof(sd_device_name))) {
     return 0;
   }
   int err = bt_set_name(new_device_name);
@@ -146,6 +203,11 @@ int bt_adv_set_device_number(uint32_t device_number) {
   return 0;
 }
 
+void advertising_notify_bond_changed(void) {
+  fal_update_pending = true;
+  advertising_start();
+}
+
 #if IS_ENABLED(CONFIG_BT_PRIVACY)
 void bt_adv_set_kind(enum advertiser_kind kind) {
   if (advertiser_kind == kind) {
@@ -155,7 +217,6 @@ void bt_adv_set_kind(enum advertiser_kind kind) {
   advertiser_kind = kind;
   bt_le_adv_stop();
   advertising_start();
-  advertiser_kind_update_pending = true;
 }
 #else
 void bt_adv_set_kind(enum advertiser_kind kind) {

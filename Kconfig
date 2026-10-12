@@ -7,16 +7,22 @@ config ZMS
 config NVS
 	default y if !(SOC_FLASH_NRF_RRAM || SOC_FLASH_NRF_MRAM)
 
-menu "Debug options"
-	config GATT_SYSTEM_INFO
-		bool "Expose system runtime data (die temp, CPU load)"
-		default n
-		select NRF_CPU_LOAD
+menu "Private device drivers"
+	config USE_RF_SW_CTL
+		bool "Use RF switch control"
+		default y
+		depends on $(dt_nodelabel_enabled,rfsw_ctl)
+	config USE_IMU_ST_LSM6DSL
+		bool "Use ST LSM6DSL as IMU"
+		default y
+		depends on $(dt_compat_on_bus,$(DT_COMPAT_ST_LSM6DSL_WAKEUP),i2c)
 endmenu
 
 menu "Central connection settings"
 	config PROXIMITY_PAIR_RSSI
 		int "Proximity pairing RSSI threshold"
+		# the ceramic antenna is not as good as inverted F setups on larger board
+		default -80 if BOARD_XIAO_NRF54L15
 		default -75
 		range -127 0
 		help
@@ -25,6 +31,16 @@ menu "Central connection settings"
 
 		  Future connections after initial proximity pairing are not affected by this setting.
 endmenu
+
+menu "Optional GATT services"
+	config GATT_SERVICE_T800_DATA_PASSTHRU
+		bool "Add T800 data passthrough service"
+		default y
+		help
+		  When enabled, a GATT service is added to the device that
+		  allows the T-800 power meter raw data to be passed along to attached centrals.
+endmenu
+
 
 menu "Bootloader trigger"
 	config BOOTLOADER_GPREGRET_VAL
@@ -45,9 +61,17 @@ menu "Battery management"
 		int "Low power mode timeout in seconds (0 = disabled)"
 		default 60
 		range 0 86400
+	
+	config AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER
+		bool "Use onboard accelerometer to wake up from low power mode"
+		default y
+		select USE_IMU_ST_LSM6DSL if $(dt_compat_on_bus,$(DT_COMPAT_ST_LSM6DSL_WAKEUP),i2c)
+		depends on $(dt_compat_on_bus,$(DT_COMPAT_ST_LSM6DSL_WAKEUP),i2c)
 
 	config AUTO_POWER_OFF_TIMEOUT
 		int "Auto power off timeout in seconds (0 = disabled)"
+		default 600 if AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER
+		default 3600 if $(dt_has_compat,gpio-keys) && !AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER
 		default 0
 		range 0 86400
 		depends on POWEROFF

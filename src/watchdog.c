@@ -7,8 +7,9 @@
 #include <zephyr/fatal.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
+#include <zephyr/shell/shell.h>
 
-const struct device *watchdog_dev = DEVICE_DT_GET(DT_NODELABEL(wdt));
+const struct device *watchdog_dev = DEVICE_DT_GET(DT_ALIAS(watchdog0));
 
 const struct wdt_timeout_cfg watchdog_timeout_cfg = {
     .window.max = 5000,
@@ -66,3 +67,11 @@ void watchdog_feed(void) {
 }
 
 uint32_t watchdog_get_reset_reason(void) { return reset_reason; }
+
+static int shell_cmd_reset_reason(const struct shell *shell, size_t argc,
+                                  char **argv) {
+  shell_print(shell, "Reset reason: %d", reset_reason);
+  return 0;
+}
+
+SHELL_CMD_REGISTER(resetreas, NULL, "Get reset reason", shell_cmd_reset_reason);

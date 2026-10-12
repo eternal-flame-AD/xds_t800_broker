@@ -1,0 +1,45 @@
+/ {
+	aliases {
+		data-activity-led = &led0;
+		watchdog0 = &wdt31;
+	};
+
+	zephyr,user {
+		vbat-divider-ratio = <2>;
+		io-channels = <&adc 7>;
+		io-channel-names = "vbat";
+	};
+
+	aliases {
+		imu0 = &lsm6ds3tr_c;
+	};
+};
+
+// bug in v3.2.4 overlay: antenna switch was not on
+&rfsw_pwr {
+	regulator-boot-on;
+};
+
+// https://github.com/Seeed-Studio/platform-seeedboards/commit/1bc7fd23168fbe2ac4c463442637113e8e287543
+&led0 {
+	gpios = <&gpio2 0 GPIO_ACTIVE_LOW>;
+	label = "LED 0";
+};
+
+&wdt31 {
+	status = "okay";
+};
+
+/delete-node/ &lsm6dso;
+
+// https://github.com/nrfconnect/sdk-zephyr/commit/dcfa19b3cf0166e8cc418acc827e3b0eb556a5bd
+&i2c30 {
+	status = "okay";
+
+	lsm6ds3tr_c: lsm6ds3tr-c@6a {
+		compatible = "st,lsm6dsl-wakeup";
+		reg = <0x6a>;
+		irq-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
+};

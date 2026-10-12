@@ -94,10 +94,11 @@ static void refresh_leds(void) {
                    (val & (1 << CENTRAL1_CONN_STATUS_LED_BIT)));
   dimmable_led_set(&central2_led_dev, brightness,
                    (val & (1 << CENTRAL2_CONN_STATUS_LED_BIT)));
-  // invert data activity led if power led is not present
-  dimmable_led_set(
-      &data_activity_led_dev, brightness,
-      (((val & (1 << DATA_ACTIVITY_LED_BIT)) != 0) ^ !power_led.valid));
+  // invert data activity led for a combined power+activity if power led is not
+  // present
+  dimmable_led_set(&data_activity_led_dev, brightness,
+                   (((val & (1 << DATA_ACTIVITY_LED_BIT)) != 0) ^
+                    power_led.valid ^ ((val & (1 << POWER_LED_BIT)) != 0)));
 }
 
 void led_temp_dim_inc(void) {

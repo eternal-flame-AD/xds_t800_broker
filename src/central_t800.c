@@ -28,9 +28,10 @@
 
 LOG_MODULE_REGISTER(central_t800, LOG_LEVEL_INF);
 
+#if IS_ENABLED(CONFIG_GATT_SERVICE_T800_DATA_PASSTHRU)
 #define BT_UUID_DATA_PASSTHRU                                                  \
-  BT_UUID_DECLARE_128(                                                         \
-      BT_UUID_128_ENCODE(0xc78f0000, 0xb6c7, 0x4ceb, 0xbcfe, 0xcba497c197e6))
+  BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(BT_UUID_MESH_PROXY_VAL << 16, 0xb6c7, \
+                                         0x4ceb, 0xbcfe, 0xcba497c197e6))
 
 BT_GATT_SERVICE_DEFINE(
     data_passthru_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_DATA_PASSTHRU),
@@ -40,6 +41,7 @@ BT_GATT_SERVICE_DEFINE(
     BT_GATT_CHARACTERISTIC(BT_UUID_SENSOR_LOCATION, BT_GATT_CHRC_NOTIFY,
                            BT_GATT_PERM_NONE, NULL, NULL, NULL),
     BT_GATT_CCC(bt_ccc_write_cb, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE));
+#endif
 
 static const uint8_t sensor_location = 15; // spider
 static const uint32_t cycling_power_feature =
@@ -284,10 +286,11 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
   if (err != 0) {
     LOG_ERR("Read internals after calib failed: %d", err);
     return BT_GATT_ITER_STOP;
-  } else {
-    bt_gatt_notify_uuid(NULL, BT_UUID_SENSOR_LOCATION,
-                        data_passthru_service.attrs, data, length);
   }
+#if IS_ENABLED(CONFIG_GATT_SERVICE_T800_DATA_PASSTHRU)
+  bt_gatt_notify_uuid(NULL, BT_UUID_SENSOR_LOCATION,
+                      data_passthru_service.attrs, data, length);
+#endif
 
   int16_t internal_calibration_data = 0;
   int8_t temp = INT8_MAX;
@@ -423,10 +426,11 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
   if (!data) {
     LOG_ERR("CPS CPM notify: ended");
     return BT_GATT_ITER_STOP;
-  } else {
-    bt_gatt_notify_uuid(NULL, BT_UUID_GATT_CPS_CPM, data_passthru_service.attrs,
-                        data, length);
   }
+#if IS_ENABLED(CONFIG_GATT_SERVICE_T800_DATA_PASSTHRU)
+  bt_gatt_notify_uuid(NULL, BT_UUID_GATT_CPS_CPM, data_passthru_service.attrs,
+                      data, length);
+#endif
 
   uint8_t *incoming = (uint8_t *)data;
 

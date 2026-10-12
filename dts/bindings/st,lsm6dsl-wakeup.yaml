@@ -1,0 +1,13 @@
+compatible: "st,lsm6dsl-wakeup"
+
+description: |
+  STMicroelectronics LSM6DSL 6-axis accelerometer and gyrometer accessed through
+  I2C bus
+
+include: ["i2c-device.yaml"]
+
+properties:
+  irq-gpios:
+    # This signal is active high when produced by the sensor
+    type: phandle-array
+    required: true

@@ -1,12 +1,24 @@
 #include "battery_gauge.h"
+#include "zephyr/kernel.h"
+#include <stdatomic.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/regulator.h>
 #include <zephyr/dt-bindings/adc/nrf-saadc.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 
 LOG_MODULE_REGISTER(battery_gauge, LOG_LEVEL_ERR);
+
+#define BATTERY_GAUGE_REGULATOR_EXISTS                                         \
+  DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(vbat_pwr))
+
+#if BATTERY_GAUGE_REGULATOR_EXISTS
+static const struct device *const vbat_reg =
+    COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(vbat_pwr)),
+                DEVICE_DT_GET(DT_NODELABEL(vbat_pwr)), NULL);
+#endif
 
 typedef struct {
   uint16_t voltage;
@@ -26,24 +38,17 @@ static const battery_gauge_table_t battery_gauge_table[] = {
     {CONFIG_BATTERY_GAUGE_VOLTAGE_TABLE_100, 100},
 };
 
-static const struct device *adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
-
-static int16_t battery_gauge_samples[4] = {0};
+static _Atomic int16_t battery_gauge_samples[4] = {0};
 static int16_t next_sample = 0;
 static int64_t last_calibrated_at_ms = 0;
 
-static const struct adc_channel_cfg vddh_channel_cfg = {
-    .gain = ADC_GAIN_1_4,
-    .reference = ADC_REF_INTERNAL, // 0.6V
-    .acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 20),
-    .channel_id = 0,
-    .input_positive = NRF_SAADC_VDDHDIV5,
-};
+static const struct adc_dt_spec vbat_spec =
+    ADC_DT_SPEC_GET_BY_NAME(DT_PATH(zephyr_user), vbat);
 
 int16_t battery_gauge_get_mv(void) {
   int16_t max = INT16_MIN;
   for (int i = 0; i < ARRAY_SIZE(battery_gauge_samples); i++) {
-    int16_t sample = battery_gauge_samples[i];
+    int16_t sample = atomic_load(&battery_gauge_samples[i]);
     if (sample > max) {
       max = sample;
     }
@@ -52,27 +57,52 @@ int16_t battery_gauge_get_mv(void) {
 }
 
 static int32_t gauge_read() {
+  int err;
   int16_t sample_buffer;
+#if BATTERY_GAUGE_REGULATOR_EXISTS
+  err = regulator_enable(vbat_reg);
+  if (err < 0) {
+    LOG_ERR("Failed to enable regulator: %d", err);
+    return err;
+  }
+#endif
+
   int64_t now_ms = k_uptime_get();
   struct adc_sequence sequence = {
-      .options = NULL,
-      .channels = BIT(0),
       .buffer = &sample_buffer,
       .buffer_size = sizeof(sample_buffer),
-      .resolution = 14,
-      .oversampling = 2,
       .calibrate = !last_calibrated_at_ms ||
                    (now_ms - last_calibrated_at_ms) > 180 * 1000,
   };
 
-  int err = adc_read(adc_dev, &sequence);
+  err = adc_sequence_init_dt(&vbat_spec, &sequence);
+  if (err < 0) {
+    LOG_ERR("Failed to initialize ADC sequence: %d", err);
+    return err;
+  }
+
+#if BATTERY_GAUGE_REGULATOR_EXISTS
+  k_sleep(K_MSEC(5));
+#endif
+
+  err = adc_read_dt(&vbat_spec, &sequence);
   if (err < 0) {
     LOG_ERR("Failed to read ADC: %d", err);
     return err;
   }
-  int32_t tmp = sample_buffer;
-  err = adc_raw_to_millivolts(5 * CONFIG_BATTERY_GAUGE_ADC_REFERENCE_VOLTAGE,
-                              vddh_channel_cfg.gain, sequence.resolution, &tmp);
+#if BATTERY_GAUGE_REGULATOR_EXISTS
+  err = regulator_disable(vbat_reg);
+  if (err < 0) {
+    LOG_WRN("Failed to disable regulator: %d", err);
+  }
+#endif
+
+  int32_t tmp = sample_buffer
+#if DT_NODE_HAS_PROP(DT_PATH(zephyr_user), vbat_divider_ratio)
+                * DT_PROP(DT_PATH(zephyr_user), vbat_divider_ratio)
+#endif
+      ;
+  err = adc_raw_to_millivolts_dt(&vbat_spec, &tmp);
   if (err < 0) {
     LOG_ERR("Failed to convert raw to mV: %d", err);
     return err;
@@ -85,25 +115,41 @@ static int32_t gauge_read() {
   return tmp;
 }
 
-int32_t battery_gauge_upkeep(void) {
+struct k_work_delayable battery_gauge_upkeep_work;
+
+static void battery_gauge_upkeep(struct k_work *work) {
+  (void)work;
   int32_t res = gauge_read();
   if (res < 0) {
     LOG_ERR("Failed to read ADC: %d", res);
-    return res;
+    return;
   }
 
-  battery_gauge_samples[(next_sample++) % ARRAY_SIZE(battery_gauge_samples)] =
-      res;
-
-  return 0;
+  atomic_store(&battery_gauge_samples[(next_sample++) %
+                                      ARRAY_SIZE(battery_gauge_samples)],
+               res);
+  k_work_schedule(&battery_gauge_upkeep_work, K_SECONDS(2));
 }
 
+K_WORK_DELAYABLE_DEFINE(battery_gauge_upkeep_work, battery_gauge_upkeep);
+
 int battery_gauge_setup(void) {
-  if (!device_is_ready(adc_dev)) {
-    return -EINVAL;
+  int err;
+
+#if BATTERY_GAUGE_REGULATOR_EXISTS
+  err = regulator_disable(vbat_reg);
+  if (err < 0) {
+    LOG_ERR("Failed to disable regulator: %d", err);
+    return err;
+  }
+#endif
+
+  if (!adc_is_ready_dt(&vbat_spec)) {
+    LOG_ERR("ADC not ready");
+    return -ENOTSUP;
   }
 
-  int err = adc_channel_setup(adc_dev, &vddh_channel_cfg);
+  err = adc_channel_setup_dt(&vbat_spec);
   if (err < 0) {
     LOG_ERR("Failed to setup ADC channel: %d", err);
     return err;
@@ -114,41 +160,16 @@ int battery_gauge_setup(void) {
     LOG_ERR("Failed to read ADC: %d", first_sample);
     return first_sample;
   }
-  battery_gauge_samples[0] = first_sample;
+  atomic_store(&battery_gauge_samples[0], first_sample);
   next_sample = 1;
 
+  k_work_schedule(&battery_gauge_upkeep_work, K_SECONDS(1));
   return 0;
 }
 
-int16_t battery_gauge_read(void) {
-  int16_t sample_buffer;
-  int64_t now_ms = k_uptime_get();
-  struct adc_sequence sequence = {
-      .options = NULL,
-      .channels = BIT(0),
-      .buffer = &sample_buffer,
-      .buffer_size = sizeof(sample_buffer),
-      .resolution = 14,
-      .oversampling = 2,
-      .calibrate = !last_calibrated_at_ms ||
-                   (now_ms - last_calibrated_at_ms) > 180 * 1000,
-  };
-
-  int err = adc_read(adc_dev, &sequence);
-  if (err < 0) {
-    return err;
-  }
-  int32_t tmp = sample_buffer;
-  err = adc_raw_to_millivolts(5 * CONFIG_BATTERY_GAUGE_ADC_REFERENCE_VOLTAGE,
-                              vddh_channel_cfg.gain, sequence.resolution, &tmp);
-  if (err < 0) {
-    return err;
-  }
-  if (sequence.calibrate) {
-    last_calibrated_at_ms = now_ms;
-  }
-
-  return tmp;
+void battery_gauge_teardown(void) {
+  struct k_work_sync sync;
+  k_work_cancel_delayable_sync(&battery_gauge_upkeep_work, &sync);
 }
 
 uint8_t battery_gauge_get_level(uint16_t voltage_mv) {
