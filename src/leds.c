@@ -98,7 +98,7 @@ static void refresh_leds(void) {
   // present
   dimmable_led_set(&data_activity_led_dev, brightness,
                    (((val & (1 << DATA_ACTIVITY_LED_BIT)) != 0) ^
-                    power_led.valid ^ ((val & (1 << POWER_LED_BIT)) != 0)));
+                    (!power_led.valid & ((val & (1 << POWER_LED_BIT)) != 0))));
 }
 
 void led_temp_dim_inc(void) {
