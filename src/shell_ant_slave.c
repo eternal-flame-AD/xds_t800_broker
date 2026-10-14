@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <sys/errno.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/shell/shell.h>
@@ -133,6 +134,53 @@ static int antplus_generic_slave_cmd_start_handler(const struct shell *sh,
   return 0;
 }
 
+static int antplus_generic_slave_cmd_request_handler(const struct shell *sh,
+
+                                                     size_t argc, char **argv,
+                                                     void *data) {
+  shell_print(sh, "Sending request to ANT+ Generic Slave");
+  ant_channel_config_t *config;
+  uint8_t request[8];
+  uint8_t channel_status;
+
+  if (strcmp(argv[1], "0") == 0) {
+    config = &antplus_generic_slave0_config;
+  } else if (strcmp(argv[1], "1") == 0) {
+    config = &antplus_generic_slave1_config;
+  } else {
+    shell_error(sh, "Invalid channel number: %s", argv[1]);
+    return -EINVAL;
+  }
+
+  for (size_t i = 0; i < 8; i++) {
+    if (strlen(argv[i + 1]) > 2 && argv[i + 2][0] == '0' &&
+        argv[i + 2][1] == 'x') {
+      request[i] = strtoul(argv[i + 2] + 2, NULL, 16);
+    } else {
+      request[i] = strtoul(argv[i + 2], NULL, 10);
+    }
+    if (errno != 0) {
+      shell_error(sh, "Invalid byte: %s", argv[i + 1]);
+      continue;
+    }
+  }
+  if (ant_channel_status_get(config->channel_number, &channel_status) != 0) {
+    shell_error(sh, "Failed to get channel status");
+    return -EINVAL;
+  }
+  if ((channel_status & STATUS_CHANNEL_STATE_MASK) != STATUS_TRACKING_CHANNEL) {
+    shell_error(sh, "Channel is not traking");
+    return -EINVAL;
+  }
+  int err = ant_acknowledge_message_tx(
+      antplus_generic_slave0_config.channel_number, sizeof(request), request);
+  if (err != 0) {
+    shell_error(sh, "Failed to send request: %d", err);
+    return -EINVAL;
+  }
+  return 0;
+}
+
 static int antplus_generic_slave_cmd_stop_handler(const struct shell *sh,
                                                   size_t argc, char **argv,
                                                   void *data) {
@@ -214,6 +262,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
         SHELL_HELP("Start ANT+ Slave",
                    "<0|1> <device_type> <channel_period> [<device_number>]"),
         antplus_generic_slave_cmd_start_handler, 4, 1),
+    SHELL_CMD_ARG(request, NULL,
+                  SHELL_HELP("Send request to ANT+ Slave",
+                             "<0|1> <00> <01> <02> <03> <04> <05> <06> <07>"),
+                  antplus_generic_slave_cmd_request_handler, 10, 0),
     SHELL_CMD_ARG(stop, NULL, SHELL_HELP("Stop ANT+ Slave", "<0|1>"),
                   antplus_generic_slave_cmd_stop_handler, 2, 0),
     SHELL_SUBCMD_SET_END);
