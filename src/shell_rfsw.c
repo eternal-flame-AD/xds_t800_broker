@@ -29,7 +29,8 @@ static int shell_rfsw_cmd_handler(const struct shell *shell, size_t argc,
       err = regulator_enable(rfsw_ctl_reg);
       if (err == 0) {
         uint8_t is_external = 1;
-        int store_err = settings_save_one(SETTINGS_RF_SW_EXTERNAL_SEGMENT,
+        int store_err = settings_save_one(SETTINGS_RF_SW_SUBTREE
+                                          "/" SETTINGS_RF_SW_EXTERNAL_SEGMENT,
                                           &is_external, sizeof(is_external));
         if (store_err != 0) {
           LOG_ERR("Failed to save RF switch settings: %d", err);
@@ -39,7 +40,8 @@ static int shell_rfsw_cmd_handler(const struct shell *shell, size_t argc,
     if (strcmp(argv[1], "int") == 0 || strcmp(argv[1], "0") == 0) {
       err = regulator_disable(rfsw_ctl_reg);
       if (err == 0) {
-        int store_err = settings_delete(SETTINGS_RF_SW_EXTERNAL_SEGMENT);
+        int store_err = settings_delete(SETTINGS_RF_SW_SUBTREE
+                                        "/" SETTINGS_RF_SW_EXTERNAL_SEGMENT);
         if (store_err != 0) {
           LOG_ERR("Failed to save RF switch settings: %d", err);
         }
