@@ -377,15 +377,22 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
   }
 
   LOG_INF("Connected: %s", addr);
-  err = bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
-  if (err) {
-    LOG_ERR("bt_gatt_exchange_mtu() returned %d", err);
-  }
 
   if (instance) {
     led_set_bit(instance->led_idx);
 
     instance->next_service_uuid = instance->profile->service_uuids;
+
+    const struct bt_conn_le_phy_param param = {
+        .options = BT_CONN_LE_PHY_OPT_CODED_S2,
+        .pref_tx_phy = BT_GAP_LE_PHY_CODED,
+        .pref_rx_phy = BT_GAP_LE_PHY_CODED,
+    };
+
+    err = bt_conn_le_phy_update(conn, &param);
+    if (err) {
+      LOG_ERR("bt_conn_le_phy_update() returned %d", err);
+    }
 
     err = bt_gatt_dm_start(conn, *instance->next_service_uuid, &discovery_cb,
                            (void *)instance);
@@ -399,6 +406,15 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
     // start scanning for other profiles
     scan_start(true);
   } else {
+    // we will only do the MTU exchange on the peripheral side
+    // central profiles can do the MTU exchange themselves
+    // this it to prevent buggy implementations running out of RAM
+    // when we ask for a large MTU
+    err = bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
+    if (err) {
+      LOG_ERR("bt_gatt_exchange_mtu() returned %d", err);
+    }
+
     advertising_start();
   }
 }
@@ -489,6 +505,32 @@ static void on_conn_recycled(void) {
   scan_start(false);
 }
 
+static const char *bt_le_phy_to_str(enum bt_gap_le_phy phy) {
+  switch (phy) {
+  case BT_GAP_LE_PHY_NONE:
+    return "none";
+  case BT_GAP_LE_PHY_CODED:
+    return "coded";
+  case BT_GAP_LE_PHY_CODED_S2:
+    return "coded_s2";
+  case BT_GAP_LE_PHY_CODED_S8:
+    return "coded_s8";
+  case BT_GAP_LE_PHY_1M:
+    return "1M";
+  case BT_GAP_LE_PHY_2M:
+    return "2M";
+  }
+  return "unknown";
+}
+
+static void on_le_phy_updated(struct bt_conn *conn,
+                              struct bt_conn_le_phy_info *info) {
+  char addr[BT_ADDR_LE_STR_LEN];
+  bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+  LOG_INF("LE PHY updated: %s tx_phy %s rx_phy %s", addr,
+          bt_le_phy_to_str(info->tx_phy), bt_le_phy_to_str(info->rx_phy));
+}
+
 #if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
 static void on_le_cs_config_complete(struct bt_conn *conn, uint8_t status,
                                      struct bt_conn_le_cs_config *config) {
@@ -522,6 +564,7 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
     .disconnected = on_disconnected,
     .security_changed = on_security_changed,
     .recycled = on_conn_recycled,
+    .le_phy_updated = on_le_phy_updated,
 #if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
     .le_cs_config_complete = on_le_cs_config_complete,
 #endif
