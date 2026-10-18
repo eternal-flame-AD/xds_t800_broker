@@ -11,6 +11,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/sensor.h>
 #include <zephyr/irq.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -20,6 +21,11 @@ LOG_MODULE_REGISTER(lsm6dsl);
 struct lsm6dsl_wakeup_config {
   const struct i2c_dt_spec bus;
   const struct gpio_dt_spec irq_gpio;
+};
+
+struct lsm6dsl_temp_data {
+  struct k_mutex mutex;
+  int16_t temperature_raw;
 };
 
 static int64_t time_since_last_activity = 0;
@@ -32,6 +38,40 @@ int64_t lsm6dsl_get_time_since_last_activity(void) {
   int64_t result = time_since_last_activity;
   irq_unlock(key);
   return result;
+}
+
+static int lsm6dsl_sample_fetch(const struct device *dev,
+                                enum sensor_channel chan) {
+  if (chan != SENSOR_CHAN_ALL && chan != SENSOR_CHAN_AMBIENT_TEMP) {
+    return -ENOTSUP;
+  }
+
+  const struct lsm6dsl_wakeup_config *config = dev->config;
+  struct lsm6dsl_temp_data *data = dev->data;
+  int err;
+  uint8_t reg = 0x20;
+  k_mutex_lock(&data->mutex, K_FOREVER);
+  err =
+      i2c_write_read_dt(&config->bus, &reg, sizeof(reg), &data->temperature_raw,
+                        sizeof(data->temperature_raw));
+  k_mutex_unlock(&data->mutex);
+  return err;
+}
+
+static int lsm6dsl_channel_get(const struct device *dev,
+                               enum sensor_channel chan,
+                               struct sensor_value *val) {
+  const struct lsm6dsl_temp_data *data = dev->data;
+  if (chan != SENSOR_CHAN_AMBIENT_TEMP) {
+    return -ENOTSUP;
+  }
+  int32_t temp = (int32_t)data->temperature_raw + 25 * 256;
+  if (temp > 85 * 256 || temp < -40 * 256) {
+    return -ERANGE;
+  }
+  val->val1 = temp / 256;
+  val->val2 = (temp % 256) * (1000000 / 256);
+  return 0;
 }
 
 #if IS_ENABLED(CONFIG_AUTO_POWER_OFF_WAKE_BY_ACCELEROMETER)
@@ -54,6 +94,8 @@ static void on_lsm6dsl_int1_callback(const struct device *dev,
 
 static int lsm6dsl_init(const struct device *dev) {
   const struct lsm6dsl_wakeup_config *config = dev->config;
+  struct lsm6dsl_temp_data *data = dev->data;
+  k_mutex_init(&data->mutex);
   int err;
   uint8_t value = 0;
 
@@ -173,13 +215,20 @@ static int lsm6dsl_init(const struct device *dev) {
 #warning "LSM6DSL wakeup driver enabled without any devices"
 #endif
 
+static DEVICE_API(sensor, lsm6dsl_driver_api) = {
+    .sample_fetch = lsm6dsl_sample_fetch,
+    .channel_get = lsm6dsl_channel_get,
+};
+
 #define LSM6DSL_WAKEUP_DEFINE(inst)                                            \
   static const struct lsm6dsl_wakeup_config lsm6dsl_wakeup_config_##inst = {   \
       .bus = I2C_DT_SPEC_INST_GET(inst),                                       \
       .irq_gpio = GPIO_DT_SPEC_INST_GET(inst, irq_gpios),                      \
   };                                                                           \
-  DEVICE_DT_INST_DEFINE(inst, lsm6dsl_init, NULL, NULL,                        \
-                        &lsm6dsl_wakeup_config_##inst, POST_KERNEL,            \
-                        CONFIG_SENSOR_INIT_PRIORITY, NULL);
+  static struct lsm6dsl_temp_data lsm6dsl_temp_data_##inst = {0};              \
+  SENSOR_DEVICE_DT_INST_DEFINE(                                                \
+      inst, lsm6dsl_init, NULL, &lsm6dsl_temp_data_##inst,                     \
+      &lsm6dsl_wakeup_config_##inst, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY, \
+      &lsm6dsl_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(LSM6DSL_WAKEUP_DEFINE);

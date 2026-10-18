@@ -7,7 +7,14 @@
 #include <shell/shell_bt_nus.h>
 
 #if IS_ENABLED(CONFIG_ANT)
+#include "ant_profiles.h"
+#include "shell_ant_slave.h"
+#include <ant_init.h>
 #include <ant_key_manager.h>
+#endif
+
+#if IS_ENABLED(CONFIG_SENSOR)
+#include <zephyr/drivers/sensor.h>
 #endif
 
 #if IS_ENABLED(CONFIG_BT_CHANNEL_SOUNDING)
@@ -51,13 +58,6 @@
 #include "poweroff.h"
 #include "scanner.h"
 #include "watchdog.h"
-
-#if IS_ENABLED(CONFIG_ANT)
-#include "ant_init.h"
-#include "ant_parameters.h"
-#include "ant_profiles.h"
-#include "shell_ant_slave.h"
-#endif
 
 #define CONNECTION_ATTEMPT_LIMIT 3
 
@@ -577,7 +577,7 @@ static void ant_evt_handler(ant_evt_t *p_ant_evt) {
   if (p_ant_evt->channel == bpwr_channel_config.channel_number) {
     ant_bike_power_evt_handler(p_ant_evt, &bike_power);
     return;
-  } else if (p_ant_evt->channel == bpwr_environ_channel_config.channel_number) {
+  } else if (p_ant_evt->channel == environ_channel_config.channel_number) {
     ant_environ_evt_handler(p_ant_evt, &environ);
     return;
   } else if (p_ant_evt->channel ==
@@ -599,8 +599,6 @@ static int ant_stack_setup(void) {
     LOG_ERR("ant_init failed: %d", err);
     return err;
   }
-
-  LOG_INF("ANT version %s", ANT_VERSION_STRING);
 
   err = ant_cb_register(&ant_evt_handler);
   if (err) {
@@ -624,7 +622,7 @@ static int ant_profile_setup(void) {
 
   ant_environ_init(&environ);
 
-  err = ant_channel_init(&bpwr_environ_channel_config);
+  err = ant_channel_init(&environ_channel_config);
   if (err) {
     LOG_ERR("ant_channel_init failed: %d", err);
     return err;
@@ -711,6 +709,16 @@ int main_loop(void) {
   }
 #endif
 
+#if IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
+  if (lsm6dsl_initialized) {
+    err = ant_channel_open(environ_channel_config.channel_number);
+    if (err) {
+      LOG_ERR("Failed to open environ channel: %d", err);
+      return err;
+    }
+  }
+#endif // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
+
   err = shell_bt_nus_init();
   if (err) {
     LOG_ERR("Shell BT NUS init failed (err %d)", err);
@@ -749,6 +757,7 @@ int main_loop(void) {
 #if IS_ENABLED(CONFIG_ANT)
     ant_bike_power_set_self_battery_state(&bike_power, battery_level,
                                           battery_mv);
+    ant_environ_set_battery_state(&environ, battery_level, battery_mv);
 #endif
 
     led_set_bit(POWER_LED_BIT);
@@ -786,11 +795,33 @@ int main_loop(void) {
             CONFIG_AUTO_POWER_OFF_TIMEOUT * 1000) {
       LOG_INF("Auto power off triggered");
       enter_poweroff();
+      no_activity_since_ms = k_uptime_get();
     }
 #endif // defined(CONFIG_AUTO_POWER_OFF_TIMEOUT) &&
        // CONFIG_AUTO_POWER_OFF_TIMEOUT > 0
 
     k_sleep(K_MSEC(2000 - 75 * 3));
+
+#if IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
+    if (lsm6dsl_initialized) {
+      const struct device *lsm6dsl_device =
+          DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(st_lsm6dsl_wakeup));
+      struct sensor_value val;
+      err = sensor_sample_fetch(lsm6dsl_device);
+      if (err) {
+        LOG_ERR("Failed to fetch temperature: %d", err);
+      } else {
+        err =
+            sensor_channel_get(lsm6dsl_device, SENSOR_CHAN_AMBIENT_TEMP, &val);
+        if (err) {
+          LOG_ERR("Failed to get temperature: %d", err);
+        } else {
+          int16_t temperature = sensor_value_to_centi(&val);
+          ant_environ_temp_set(&environ, temperature);
+        }
+      }
+    }
+#endif // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
   }
 
   LOG_WRN("Main loop exited");

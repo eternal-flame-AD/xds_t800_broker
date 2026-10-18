@@ -13,7 +13,7 @@ extern struct ant_bike_power_s bike_power;
 extern struct ant_environ_s environ;
 
 extern ant_channel_config_t bpwr_channel_config;
-extern ant_channel_config_t bpwr_environ_channel_config;
+extern ant_channel_config_t environ_channel_config;
 extern ant_channel_config_t antplus_generic_slave0_config;
 extern ant_channel_config_t antplus_generic_slave1_config;
 

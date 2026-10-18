@@ -28,7 +28,7 @@ ant_channel_config_t bpwr_channel_config = {
     .network_number = ANT_NETWORK_ANTPLUS,
 };
 
-ant_channel_config_t bpwr_environ_channel_config = {
+ant_channel_config_t environ_channel_config = {
     .channel_number = 1,
     .channel_type = 0x10,
     .ext_assign = 0,
@@ -37,7 +37,7 @@ ant_channel_config_t bpwr_environ_channel_config = {
     .device_type = 25,
     .device_number =
         CONFIG_BPWR_TX_FALLBACK_DEVICE_NUMBER, // to be filled by hardware id
-    .channel_period = 8192,
+    .channel_period = 65535,
     .network_number = ANT_NETWORK_ANTPLUS,
 };
 
@@ -112,7 +112,7 @@ int ant_profiles_set_device_number(uint32_t device_number, bool persist) {
   }
 
   ant_channel_config_t *configs[] = {&bpwr_channel_config,
-                                     &bpwr_environ_channel_config};
+                                     &environ_channel_config};
   for (size_t i = 0; i < ARRAY_SIZE(configs); i++) {
     configs[i]->transmission_type &= 0x0F;
     configs[i]->transmission_type |= device_number_high << 4;

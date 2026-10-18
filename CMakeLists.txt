@@ -75,7 +75,6 @@ target_sources(app PRIVATE
   src/gatt_dis.c
   src/shell_flush.c
   src/shell_bt.c
-  src/shell_poweroff.c
   src/bootloader.c
   src/battery_gauge.c
   src/watchdog.c
