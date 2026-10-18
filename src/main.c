@@ -749,7 +749,7 @@ int main_loop(void) {
     watchdog_feed();
     uint16_t battery_mv = battery_gauge_get_mv();
     uint8_t battery_level = battery_gauge_get_level(battery_mv);
-    low_batt |= battery_level < LOW_BATTERY_THRESHOLD;
+    low_batt |= battery_level <= LOW_BATTERY_THRESHOLD;
     low_batt &= battery_level <
                 LOW_BATTERY_THRESHOLD + LOW_BATTERY_THRESHOLD_HYSTERESIS;
 
