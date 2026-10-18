@@ -9,4 +9,12 @@ config USB_PRODUCT_STRING
     string "USB Product String"
     default "XDS_T800_Broker"
 
+config BT_DEVICE_NAME
+    default "XDS_T800_Broker"
+
+config BT_CTLR_TX_PWR_ANTENNA
+    # the Xiao NRF54L15 has a ceramic antenna
+    # which is less efficient
+    default 8 if BOARD_XIAO_NRF54L15
+
 endmenu
