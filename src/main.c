@@ -579,10 +579,10 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 static void ant_evt_handler(ant_evt_t *p_ant_evt) {
 
   if (p_ant_evt->channel == bpwr_channel_config.channel_number) {
-    ant_bike_power_evt_handler(p_ant_evt, &bike_power);
+    ant_bike_power_evt_handler(p_ant_evt, &ant_profile_bike_power);
     return;
   } else if (p_ant_evt->channel == environ_channel_config.channel_number) {
-    ant_environ_evt_handler(p_ant_evt, &environ);
+    ant_environ_evt_handler(p_ant_evt, &ant_profile_environ);
     return;
   } else if (p_ant_evt->channel ==
                  antplus_generic_slave0_config.channel_number ||
@@ -613,28 +613,6 @@ static int ant_stack_setup(void) {
   err = ant_plus_key_set(ANT_NETWORK_ANTPLUS);
   if (err) {
     LOG_ERR("ant_plus_key_set failed: %d", err);
-    return err;
-  }
-
-  return 0;
-}
-
-static int ant_profile_setup(void) {
-  int err;
-
-  ant_bike_power_init(&bike_power, central_t800_offset_compensation_start_ant);
-
-  ant_environ_init(&environ);
-
-  err = ant_channel_init(&environ_channel_config);
-  if (err) {
-    LOG_ERR("ant_channel_init failed: %d", err);
-    return err;
-  }
-
-  err = ant_channel_init(&bpwr_channel_config);
-  if (err) {
-    LOG_ERR("ant_channel_init failed: %d", err);
     return err;
   }
 
@@ -761,9 +739,10 @@ int main_loop(void) {
 
     bas_battery_level_self_set(battery_level, battery_mv);
 #if IS_ENABLED(CONFIG_ANT)
-    ant_bike_power_set_self_battery_state(&bike_power, battery_level,
-                                          battery_mv);
-    ant_environ_set_battery_state(&environ, battery_level, battery_mv);
+    ant_bike_power_set_self_battery_state(&ant_profile_bike_power,
+                                          battery_level, battery_mv);
+    ant_environ_set_battery_state(&ant_profile_environ, battery_level,
+                                  battery_mv);
 #endif
 
     led_set_bit(POWER_LED_BIT);

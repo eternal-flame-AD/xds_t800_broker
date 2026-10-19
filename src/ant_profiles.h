@@ -9,13 +9,15 @@
 
 #define ANT_NETWORK_ANTPLUS 0
 
-extern struct ant_bike_power_s bike_power;
-extern struct ant_environ_s environ;
+extern struct ant_bike_power_s ant_profile_bike_power;
+extern struct ant_environ_s ant_profile_environ;
 
 extern ant_channel_config_t bpwr_channel_config;
 extern ant_channel_config_t environ_channel_config;
 extern ant_channel_config_t antplus_generic_slave0_config;
 extern ant_channel_config_t antplus_generic_slave1_config;
+
+int ant_profile_setup(void);
 
 uint32_t ant_profiles_create_device_number(uint32_t seed);
 

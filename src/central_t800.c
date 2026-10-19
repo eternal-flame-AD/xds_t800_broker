@@ -142,7 +142,7 @@ static uint8_t read_dis_serial_number_cb(struct bt_conn *conn, uint8_t err,
   }
   LOG_INF("DIS serial number: %d", serial_number);
 #if IS_ENABLED(CONFIG_ANT)
-  ant_bike_power_set_serial_number(&bike_power, serial_number);
+  ant_bike_power_set_serial_number(&ant_profile_bike_power, serial_number);
 #endif
   return BT_GATT_ITER_STOP;
 }
@@ -242,7 +242,7 @@ static void calibration_write_cb(struct bt_conn *conn, uint8_t err,
   if (err != 0) {
     LOG_ERR("Calibration write failed: %d", err);
 #if IS_ENABLED(CONFIG_ANT)
-    ant_bike_power_calib_response(&bike_power, false, -3);
+    ant_bike_power_calib_response(&ant_profile_bike_power, false, -3);
 #endif
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x04;
@@ -316,7 +316,8 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
   }
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
 #if IS_ENABLED(CONFIG_ANT)
-    ant_bike_power_calib_response(&bike_power, true, internal_calibration_data);
+    ant_bike_power_calib_response(&ant_profile_bike_power, true,
+                                  internal_calibration_data);
 #endif
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x01;
@@ -354,7 +355,8 @@ bt_gatt_notify_func_bas_battery_level(struct bt_conn *conn,
     uint8_t new_battery_level = incoming[0];
     if (new_battery_level > 0 && new_battery_level <= 100) {
 #if IS_ENABLED(CONFIG_ANT)
-      ant_bike_power_set_battery_state(&bike_power, new_battery_level);
+      ant_bike_power_set_battery_state(&ant_profile_bike_power,
+                                       new_battery_level);
 #endif
       bas_battery_level_set(new_battery_level);
     }
@@ -388,7 +390,7 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
         }
       }
 #if IS_ENABLED(CONFIG_ANT)
-      ant_bike_power_calib_response(&bike_power, true, 0);
+      ant_bike_power_calib_response(&ant_profile_bike_power, true, 0);
 #endif
       if (cpcp_data_buf[0] == 0x20) {
         cpcp_data_buf[2] = 0x01;
@@ -405,7 +407,7 @@ bt_gatt_notify_func_sc_cp(struct bt_conn *conn,
     } else {
       LOG_ERR("SC CP calibration failed (%d)", status);
 #if IS_ENABLED(CONFIG_ANT)
-      ant_bike_power_calib_response(&bike_power, false, status);
+      ant_bike_power_calib_response(&ant_profile_bike_power, false, status);
 #endif
       if (cpcp_data_buf[0] == 0x20) {
         cpcp_data_buf[2] = 0x04;
@@ -491,7 +493,7 @@ bt_gatt_notify_func_cps_cpm(struct bt_conn *conn,
     out[3] = (totPower >> 8) & 0xFF;
 
 #if IS_ENABLED(CONFIG_ANT)
-    ant_bike_power_update(&bike_power, totPower, (200 - out[4]) / 2,
+    ant_bike_power_update(&ant_profile_bike_power, totPower, (200 - out[4]) / 2,
                           cadence < 0 ? 0 : cadence, angle);
 #endif
 
@@ -699,7 +701,7 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   k_timer_user_data_set(&cps_stuck_sensor_timer, NULL);
   if (atomic_fetch_and(&calibration_result_pending, 0) == 1) {
 #if IS_ENABLED(CONFIG_ANT)
-    ant_bike_power_calib_response(&bike_power, true, 0);
+    ant_bike_power_calib_response(&ant_profile_bike_power, true, 0);
 #endif
     if (cpcp_data_buf[0] == 0x20) {
       cpcp_data_buf[2] = 0x01;

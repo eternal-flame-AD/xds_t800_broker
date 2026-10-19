@@ -1,6 +1,7 @@
 #include "ant_profiles.h"
 #include "advertiser.h"
 #include "ant_bike_power.h"
+#include "central_t800.h"
 #include <ant_channel_config.h>
 #include <stdlib.h>
 
@@ -12,8 +13,8 @@
 
 LOG_MODULE_REGISTER(ant_profiles, LOG_LEVEL_INF);
 
-struct ant_bike_power_s bike_power;
-struct ant_environ_s environ;
+struct ant_bike_power_s ant_profile_bike_power;
+struct ant_environ_s ant_profile_environ;
 
 ant_channel_config_t bpwr_channel_config = {
     .channel_number = 0,
@@ -64,6 +65,29 @@ ant_channel_config_t antplus_generic_slave1_config = {
     .channel_period = 0, // to be filled
     .network_number = ANT_NETWORK_ANTPLUS,
 };
+
+int ant_profile_setup(void) {
+  int err;
+
+  ant_bike_power_init(&ant_profile_bike_power,
+                      central_t800_offset_compensation_start_ant);
+
+  ant_environ_init(&ant_profile_environ);
+
+  err = ant_channel_init(&environ_channel_config);
+  if (err) {
+    LOG_ERR("ant_channel_init failed: %d", err);
+    return err;
+  }
+
+  err = ant_channel_init(&bpwr_channel_config);
+  if (err) {
+    LOG_ERR("ant_channel_init failed: %d", err);
+    return err;
+  }
+
+  return 0;
+}
 
 uint32_t ant_profiles_create_device_number(uint32_t seed) {
   uint32_t device_number = seed % 65535 + 1;

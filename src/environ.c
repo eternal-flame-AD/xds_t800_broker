@@ -35,7 +35,7 @@ BT_GATT_SERVICE_DEFINE(ess_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_ESS),
 
 void environ_set_temp(int16_t temp_c_centi) {
 #if CONFIG_ANT_ENVIRON_TX
-  ant_environ_temp_set(&environ, temp_c_centi);
+  ant_environ_temp_set(&ant_profile_environ, temp_c_centi);
 #endif
   current_temp = temp_c_centi;
 }
