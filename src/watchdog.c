@@ -9,9 +9,9 @@
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/shell/shell.h>
 
-const struct device *watchdog_dev = DEVICE_DT_GET(DT_ALIAS(watchdog0));
+const static struct device *watchdog_dev = DEVICE_DT_GET(DT_ALIAS(watchdog0));
 
-const struct wdt_timeout_cfg watchdog_timeout_cfg = {
+const static struct wdt_timeout_cfg watchdog_timeout_cfg = {
     .window.max = 5000,
     .flags = WDT_FLAG_RESET_SOC,
 };
