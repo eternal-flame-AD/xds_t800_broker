@@ -127,8 +127,8 @@ static int lsm6dsl_init(const struct device *dev) {
   if (err != 0) {
     return err;
   }
-  // set significant motion detection threshold to 3
-  err = i2c_reg_write_byte_dt(&config->bus, 0x13, 3);
+  // set significant motion detection threshold to 2
+  err = i2c_reg_write_byte_dt(&config->bus, 0x13, 2);
   if (err != 0) {
     return err;
   }

@@ -51,7 +51,26 @@ menu "Bootloader trigger"
 		range 0 255
 endmenu
 
-menu "Data conditioning"
+menu "Data source and conditioning"
+	config HAS_ENVIRON_TX_TEMP
+		bool
+
+	choice ENVIRON_TX_TEMP
+		prompt "Temperature source"
+		default ENVIRON_TX_TEMP_ST_LSM6DSL if USE_IMU_ST_LSM6DSL
+		default ENVIRON_TX_TEMP_T800
+	config ENVIRON_TX_TEMP_T800
+		bool "Temperature from T-800 Sensor"
+		select HAS_ENVIRON_TX_TEMP
+	config ENVIRON_TX_TEMP_ST_LSM6DSL
+		bool "Temperature from ST LSM6DSL Sensor"
+		select HAS_ENVIRON_TX_TEMP
+		depends on USE_IMU_ST_LSM6DSL
+	endchoice
+
+	config ENVIRON_TX_TEMP_AUTHEN
+		bool "Require authentication for temperature reading"
+
 	config BPWR_CLIP_RISING_DELTA
 		int "Clip rising delta in power readings to this value (W/smpl)"
 		default 300
@@ -141,17 +160,10 @@ endmenu
 
 if ANT
 menu "ANT+ information"
-	choice ENVIRON_TX_TEMP
-		prompt "ANT+ temperature"
-		default ENVIRON_TX_TEMP_ST_LSM6DSL if USE_IMU_ST_LSM6DSL
-		default ENVIRON_TX_TEMP_T800
-	config ENVIRON_TX_TEMP_T800
-		bool "Temperature from T-800 Sensor"
-	config ENVIRON_TX_TEMP_ST_LSM6DSL
-		bool "Temperature from ST LSM6DSL Sensor"
-		depends on USE_IMU_ST_LSM6DSL
-	endchoice
-		
+	config ANT_ENVIRON_TX
+		bool "Enable Environment (temperature) transmission"
+		default y
+		depends on HAS_ENVIRON_TX_TEMP
 
 	config ANT_HW_VERSION
 		int "Hardware revision"

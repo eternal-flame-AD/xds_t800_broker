@@ -14,7 +14,7 @@ Measurement Service so that regular head units can read it.
 
 - Low power consumption suitable for touring (~5mW)
 - Power, cadence and power balance readout
-- ANT+ Temperature either from T-800 or onboard accelerometer
+- Temperature either from T-800 or onboard accelerometer
 - Meter battery readout (shows up as "right/1st" battery on ANT+, "external" over BLE)
 - Onboard battery gauge when powered via batteries with configurable discharge curve (shows up as "left/2nd" on ANT+, "internal" over BLE)
 - Offset compensation (calibration) support with offset readback (tested on a Garmin Edge 1050)

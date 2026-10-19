@@ -17,6 +17,10 @@
 #include "ant_profiles.h"
 #endif
 
+#if IS_ENABLED(CONFIG_HAS_ENVIRON_TX_TEMP)
+#include "environ.h"
+#endif
+
 #include "crank_sim.h"
 #include "gatt_battery.h"
 #include "gatt_callbacks.h"
@@ -303,9 +307,9 @@ static uint8_t read_internals_cb(struct bt_conn *conn, uint8_t err,
     internal_calibration_data = incoming[1] | (incoming[2] << 8);
     uint16_t weight_raw = incoming[3] | (incoming[4] << 8);
     weight = (int16_t)weight_raw;
-#if IS_ENABLED(CONFIG_ANT) && IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
-    ant_environ_temp_set(&environ, (int16_t)temp * 100);
-#endif // IS_ENABLED(CONFIG_ANT) && IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
+#if IS_ENABLED(CONFIG_HAS_ENVIRON_TX_TEMP)
+    environ_set_temp((int16_t)temp * 100);
+#endif // IS_ENABLED(CONFIG_HAS_ENVIRON_TX_TEMP)
 
     LOG_DBG("temp=%d, adj=%d, force=%dcgF", temp, internal_calibration_data,
             weight);
@@ -666,12 +670,13 @@ static void on_connected(struct bt_conn *conn) {
   if (err) {
     LOG_ERR("Failed to open main channel: %d", err);
   }
-#if IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
+#if IS_ENABLED(CONFIG_ANT_ENVIRON_TX) && IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
   err = ant_channel_open(environ_channel_config.channel_number);
   if (err) {
     LOG_ERR("Failed to open environ channel: %d", err);
   }
-#endif // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
+#endif // IS_ENABLED(CONFIG_ANT_ENVIRON_TX) &&
+       // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
 #endif // IS_ENABLED(CONFIG_ANT)
   k_timer_user_data_set(&cps_stuck_sensor_timer, conn);
   last_data_ms = k_uptime_get();
@@ -685,9 +690,10 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason) {
   LOG_INF("on_disconnected, reason: %d", reason);
 #if IS_ENABLED(CONFIG_ANT)
   ant_channel_close(bpwr_channel_config.channel_number);
-#if IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
+#if IS_ENABLED(CONFIG_ANT_ENVIRON_TX) && IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
   ant_channel_close(environ_channel_config.channel_number);
-#endif // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
+#endif // IS_ENABLED(CONFIG_ANT_ENVIRON_TX) &&
+       // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_T800)
 #endif // IS_ENABLED(CONFIG_ANT)
   k_timer_stop(&cps_stuck_sensor_timer);
   k_timer_user_data_set(&cps_stuck_sensor_timer, NULL);

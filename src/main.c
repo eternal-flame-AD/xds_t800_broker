@@ -22,6 +22,10 @@
 #include <zephyr/bluetooth/cs.h>
 #endif
 
+#if IS_ENABLED(CONFIG_HAS_ENVIRON_TX_TEMP)
+#include "environ.h"
+#endif
+
 #include <zephyr/bluetooth/assigned_numbers.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -709,7 +713,8 @@ int main_loop(void) {
   }
 #endif
 
-#if IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
+#if IS_ENABLED(CONFIG_ANT_ENVIRON_TX) &&                                       \
+    IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
   if (lsm6dsl_initialized) {
     err = ant_channel_open(environ_channel_config.channel_number);
     if (err) {
@@ -717,7 +722,8 @@ int main_loop(void) {
       return err;
     }
   }
-#endif // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
+#endif // IS_ENABLED(CONFIG_ANT_ENVIRON_TX) &&
+       // IS_ENABLED(CONFIG_ENVIRON_TX_TEMP_ST_LSM6DSL)
 
   err = shell_bt_nus_init();
   if (err) {
@@ -816,8 +822,8 @@ int main_loop(void) {
         if (err) {
           LOG_ERR("Failed to get temperature: %d", err);
         } else {
-          int16_t temperature = sensor_value_to_centi(&val);
-          ant_environ_temp_set(&environ, temperature);
+          int16_t temperature = (int16_t)(sensor_value_to_centi(&val));
+          environ_set_temp(temperature);
         }
       }
     }

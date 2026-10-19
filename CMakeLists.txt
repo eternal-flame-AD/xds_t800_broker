@@ -102,5 +102,8 @@ target_sources_ifdef(CONFIG_ANT app PRIVATE
   src/shell_ant_master.c
 )
 
+target_sources_ifdef(CONFIG_HAS_ENVIRON_TX_TEMP app PRIVATE
+  src/environ.c
+)
 
 # NORDIC SDK APP END
