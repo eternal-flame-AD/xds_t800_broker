@@ -153,23 +153,19 @@ menu "ANT+ information"
 	endchoice
 		
 
-	config BPWR_TX_HW_VERSION
+	config ANT_HW_VERSION
 		int "Hardware revision"
-		default 5
+		default 1
 	
-	config BPWR_TX_MFG_ID
+	config ANT_MFG_ID
 		int "Manufacturer ID"
 		default 255
 	
-	config BPWR_TX_MODEL_NUM
+	config ANT_MODEL_NUM
 		int "Model number"
-		default 2
+		default 1
 	
-	config BPWR_TX_SW_VERSION
-		int "Software version"
-		default 0
-	
-	config BPWR_TX_FALLBACK_DEVICE_NUMBER
+	config ANT_FALLBACK_DEVICE_NUMBER
 		int "Fallback device number with hardware ID not available"
 		default 12345
 		range 1 65535

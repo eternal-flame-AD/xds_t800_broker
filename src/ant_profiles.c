@@ -23,7 +23,7 @@ ant_channel_config_t bpwr_channel_config = {
     .transmission_type = 5,
     .device_type = 11,
     .device_number =
-        CONFIG_BPWR_TX_FALLBACK_DEVICE_NUMBER, // to be filled by hardware id
+        CONFIG_ANT_FALLBACK_DEVICE_NUMBER, // to be filled by hardware id
     .channel_period = 8182,
     .network_number = ANT_NETWORK_ANTPLUS,
 };
@@ -36,7 +36,7 @@ ant_channel_config_t environ_channel_config = {
     .transmission_type = 5,
     .device_type = 25,
     .device_number =
-        CONFIG_BPWR_TX_FALLBACK_DEVICE_NUMBER, // to be filled by hardware id
+        CONFIG_ANT_FALLBACK_DEVICE_NUMBER, // to be filled by hardware id
     .channel_period = 65535,
     .network_number = ANT_NETWORK_ANTPLUS,
 };

@@ -25,11 +25,10 @@ void ant_environ_init(struct ant_environ_s *p_environ) {
   }
   p_environ->temp_valid = false;
 
-  ant_common_page80_data_t page_80 =
-      ANT_COMMON_page80(CONFIG_BPWR_TX_HW_VERSION, CONFIG_BPWR_TX_MFG_ID,
-                        CONFIG_BPWR_TX_MODEL_NUM);
-  ant_common_page81_data_t page_81 = ANT_COMMON_page81(
-      CONFIG_BPWR_TX_SW_VERSION, CONFIG_BPWR_TX_SW_VERSION, 0);
+  ant_common_page80_data_t page_80 = ANT_COMMON_page80(
+      CONFIG_ANT_HW_VERSION, CONFIG_ANT_MFG_ID, CONFIG_ANT_MODEL_NUM);
+  ant_common_page81_data_t page_81 =
+      ANT_COMMON_page81(APP_VERSION_INT, 0xff, 0);
 
   p_environ->cache_page_80[0] = 80;
   ant_common_page_80_encode(p_environ->cache_page_80 + 1, &page_80);

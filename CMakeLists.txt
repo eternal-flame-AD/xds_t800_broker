@@ -55,7 +55,8 @@ if(HAVE_TYPEOF)
 endif()
 
 execute_process(COMMAND git rev-parse --short HEAD OUTPUT_VARIABLE _git_commit ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
-target_compile_definitions(app PUBLIC "-DGIT_COMMIT=\"${_git_commit}\"")
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/APP_VERSION _app_version LIMIT_COUNT 1 LENGTH_MINIMUM 1 REGEX "^[0-9]+$")
+target_compile_definitions(app PUBLIC "-DGIT_COMMIT=\"${_git_commit}\"" "-DAPP_VERSION_INT=${_app_version}")
 
 zephyr_iterable_section(NAME central_profile_instance GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT})
 zephyr_linker_sources(DATA_SECTIONS iterables.ld)
