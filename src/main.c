@@ -375,7 +375,9 @@ static void on_connected(struct bt_conn *conn, uint8_t conn_err) {
       }
     }
 
-    bt_conn_unref(conn);
+    if (conn_info.role == BT_CONN_ROLE_CENTRAL) {
+      bt_conn_unref(conn);
+    }
 
     return;
   }
